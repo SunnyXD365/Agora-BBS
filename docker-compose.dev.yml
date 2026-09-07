@@ -1,0 +1,131 @@
+networks:
+  agora-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  go_pkg_mod:
+
+services:
+  agora-postgres:
+    image: docker.io/library/postgres:16-alpine
+    container_name: agora-postgres
+    environment:
+      POSTGRES_USER: agora_user
+      POSTGRES_PASSWORD: agora_password
+      POSTGRES_DB: agora_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - agora-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agora_user -d agora_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  agora-redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: agora-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - agora-network
+
+  agora-temporal:
+    image: docker.io/temporalio/auto-setup:1.24.2
+    container_name: agora-temporal
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=agora_user
+      - POSTGRES_PWD=agora_password
+      - POSTGRES_SEEDS=agora-postgres
+    ports:
+      - "7233:7233"
+    networks:
+      - agora-network
+    depends_on:
+      agora-postgres:
+        condition: service_healthy
+
+  agora-temporal-ui:
+    image: docker.io/temporalio/ui:2.28.0
+    container_name: agora-temporal-ui
+    environment:
+      - TEMPORAL_ADDRESS=agora-temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:8233
+    ports:
+      - "8233:8080"
+    networks:
+      - agora-network
+    depends_on:
+      - agora-temporal
+
+  agora-backend-api:
+    image: docker.io/library/golang:1.23-alpine
+    container_name: agora-backend-api
+    working_dir: /app
+    volumes:
+      - ./backend:/app:z
+      - go_pkg_mod:/go/pkg/mod
+    environment:
+      - DB_HOST=agora-postgres
+      - REDIS_HOST=agora-redis
+      - TEMPORAL_HOST=agora-temporal:7233
+    command: sh -c "apk add --no-cache git && go install github.com/air-verse/air@v1.61.1 && air -c .air.api.toml"
+    ports:
+      - "8081:8080"
+    networks:
+      - agora-network
+    depends_on:
+      agora-postgres:
+        condition: service_healthy
+
+  agora-backend-worker:
+    image: docker.io/library/golang:1.23-alpine
+    container_name: agora-backend-worker
+    working_dir: /app
+    volumes:
+      - ./backend:/app:z
+      - go_pkg_mod:/go/pkg/mod
+    environment:
+      - DB_HOST=agora-postgres
+      - REDIS_HOST=agora-redis
+      - TEMPORAL_HOST=agora-temporal:7233
+    command: sh -c "apk add --no-cache git && go install github.com/air-verse/air@v1.61.1 && air -c .air.worker.toml"
+    networks:
+      - agora-network
+    depends_on:
+      - agora-temporal
+
+  agora-frontend:
+    image: docker.io/library/node:20-alpine
+    container_name: agora-frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app:z
+      - /app/node_modules
+    environment:
+      - WATCHPACK_POLLING=true
+    command: sh -c "npm install && npm run dev"
+    networks:
+      - agora-network
+
+  agora-nginx:
+    image: docker.io/library/nginx:1.25-alpine
+    container_name: agora-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro,z
+    networks:
+      - agora-network
+    depends_on:
+      - agora-frontend
+      - agora-backend-api

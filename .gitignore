@@ -1,0 +1,29 @@
+# OS & Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/*.log
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+
+# Backend
+backend/tmp/
+backend/bin/
+backend/*.exe
+backend/*.out
