@@ -46,7 +46,6 @@ services:
       - POSTGRES_USER=agora_user
       - POSTGRES_PWD=agora_password
       - POSTGRES_SEEDS=agora-postgres
-      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
     ports:
       - "7233:7233"
     networks:
@@ -79,7 +78,7 @@ services:
       - DB_HOST=agora-postgres
       - REDIS_HOST=agora-redis
       - TEMPORAL_HOST=agora-temporal:7233
-    command: sh -c "go install github.com/air-verse/air@latest && air -c .air.api.toml"
+    command: sh -c "apk add --no-cache git && go install github.com/air-verse/air@v1.61.1 && air -c .air.api.toml"
     ports:
       - "8081:8080"
     networks:
@@ -99,7 +98,7 @@ services:
       - DB_HOST=agora-postgres
       - REDIS_HOST=agora-redis
       - TEMPORAL_HOST=agora-temporal:7233
-    command: sh -c "go install github.com/air-verse/air@latest && air -c .air.worker.toml"
+    command: sh -c "apk add --no-cache git && go install github.com/air-verse/air@v1.61.1 && air -c .air.worker.toml"
     networks:
       - agora-network
     depends_on:
