@@ -79,7 +79,7 @@ services:
       - DB_HOST=agora-postgres
       - REDIS_HOST=agora-redis
       - TEMPORAL_HOST=agora-temporal:7233
-    command: sh -c "go install github.com/air-verse/air@latest && air -c .air.toml"
+    command: sh -c "go install github.com/air-verse/air@latest && air -c .air.api.toml"
     ports:
       - "8081:8080"
     networks:
@@ -99,7 +99,7 @@ services:
       - DB_HOST=agora-postgres
       - REDIS_HOST=agora-redis
       - TEMPORAL_HOST=agora-temporal:7233
-    command: sh -c "go install github.com/air-verse/air@latest && air -c .air.toml"
+    command: sh -c "go install github.com/air-verse/air@latest && air -c .air.worker.toml"
     networks:
       - agora-network
     depends_on:
@@ -122,7 +122,7 @@ services:
     image: docker.io/library/nginx:1.25-alpine
     container_name: agora-nginx
     ports:
-      - "80:80"
+      - "8080:80"
     volumes:
       - ./nginx/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro,z
     networks:
