@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import CategoryNav from './CategoryNav';
 
 export default function Header() {
   const { user, logout, loading } = useAuth();
@@ -13,6 +14,11 @@ export default function Header() {
         <Link href="/" className="text-xl font-bold text-gray-900 hover:text-blue-600 transition">
           Agora BBS
         </Link>
+
+        {/* 板块导航 */}
+        <div className="hidden md:block">
+          <CategoryNav />
+        </div>
 
         {/* 导航区域 */}
         <div className="flex items-center space-x-4">

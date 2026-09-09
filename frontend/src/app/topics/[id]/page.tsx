@@ -23,8 +23,12 @@ export default function TopicDetailPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     const fetchTopicDetail = async () => {
       try {
-        const res = await topicsApi.getTopicDetail(id);
-        setTopic(res.data);
+        const [topicRes, postsRes] = await Promise.all([
+          topicsApi.getTopicDetail(id),
+          postsApi.getPosts(id),
+        ]);
+        setTopic(topicRes.data);
+        setPosts(postsRes.data);
       } catch (err: any) {
         setError(err.message || '获取帖子详情失败');
       } finally {
@@ -49,8 +53,9 @@ export default function TopicDetailPage({ params }: { params: Promise<{ id: stri
         content: replyContent,
       });
 
-      // 本地追加回复列表并清除表单
-      setPosts((prev) => [...prev, res.data]);
+      // 重新获取回复列表，确保数据一致
+      const postsRes = await postsApi.getPosts(id);
+      setPosts(postsRes.data);
       setReplyContent('');
       if (topic) {
         setTopic({ ...topic, reply_count: topic.reply_count + 1 });
@@ -78,7 +83,7 @@ export default function TopicDetailPage({ params }: { params: Promise<{ id: stri
         
         <div className="flex items-center space-x-4 text-xs text-gray-500 border-b pb-4">
           <span className="font-semibold text-gray-700">
-            {`用户 #${topic.author_id}`}
+            {topic.author_name || `用户 #${topic.author_id}`}
           </span>
           <span>•</span>
           <span>发布于 {new Date(topic.created_at).toLocaleString()}</span>
@@ -103,7 +108,7 @@ export default function TopicDetailPage({ params }: { params: Promise<{ id: stri
           posts.map((post, index) => (
             <div key={post.id || index} className="p-4 bg-white border rounded-lg shadow-sm space-y-2">
               <div className="flex justify-between items-center text-xs text-gray-500 border-b pb-2">
-                <span>用户 #{post.author_id}</span>
+                <span>{post.author_name || `用户 #${post.author_id}`}</span>
                 <span>#{index + 1} 楼 • {new Date(post.created_at).toLocaleString()}</span>
               </div>
               <p className="text-gray-800 text-sm whitespace-pre-wrap">{post.content}</p>
