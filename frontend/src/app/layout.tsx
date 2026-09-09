@@ -15,7 +15,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body className="bg-gray-50 min-h-screen text-gray-900 antialiased">
+      <body className="min-h-screen antialiased">
         <AuthProvider>
           <Header />
           <main className="max-w-5xl mx-auto px-4 py-6">{children}</main>

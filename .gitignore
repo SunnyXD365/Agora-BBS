@@ -27,3 +27,4 @@ backend/tmp/
 backend/bin/
 backend/*.exe
 backend/*.out
+.aider*
