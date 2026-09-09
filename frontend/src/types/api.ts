@@ -29,6 +29,7 @@ export interface User {
   trust_score: number;
   unlock_level?: number;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface Topic {

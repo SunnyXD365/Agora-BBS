@@ -129,6 +129,7 @@ export const topicsApi = {
               view_count: 42,
               reply_count: 5,
               created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
             },
           ],
           pagination: { page: 1, page_size: 20, total: 1 },
@@ -156,6 +157,7 @@ export const topicsApi = {
           view_count: 43,
           reply_count: 5,
           created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         },
       });
     }
