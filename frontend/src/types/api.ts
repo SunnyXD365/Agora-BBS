@@ -60,6 +60,7 @@ export interface Post {
   id: number;
   topic_id: number;
   author_id: number;
+  author_name?: string;
   parent_id: number | null;
   content: string;
   post_type: 'reply' | 'topic' | string;// 这里和数据库的意图不同
@@ -67,6 +68,7 @@ export interface Post {
   cooling_ends_at?: string | null;
   created_at: string;
   updated_at?: string;
+  children?: Post[]; // 用于前端构建树形结构
 }
 
 /**
