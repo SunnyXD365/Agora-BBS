@@ -29,16 +29,16 @@ export default function HomePage() {
   return (
     <div className="space-y-8">
       {/* 板块导航区域 */}
-      <section className="bg-white p-6 border rounded-lg shadow-sm">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">板块导航</h2>
+      <section className="bg-[#141414] p-6 border border-gray-800 rounded-lg">
+        <h2 className="text-lg font-bold text-gray-200 mb-4">板块导航</h2>
         <CategoryNav />
       </section>
 
       {/* 最新主题区域 */}
       <section>
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-900">最新讨论</h2>
-          <Link href="/topics" className="text-sm text-blue-600 hover:underline">
+          <h2 className="text-xl font-bold text-gray-200">最新讨论</h2>
+          <Link href="/topics" className="text-sm text-gray-400 hover:text-gray-200 transition">
             查看全部 →
           </Link>
         </div>
@@ -48,7 +48,7 @@ export default function HomePage() {
         ) : error ? (
           <div className="py-12 text-center text-red-500">{error}</div>
         ) : topics.length === 0 ? (
-          <div className="p-8 text-center bg-white border rounded-lg text-gray-500">
+          <div className="p-8 text-center bg-[#141414] border border-gray-800 rounded-lg text-gray-500">
             暂无主题帖，赶快去发布第一个帖子吧！
           </div>
         ) : (
@@ -56,12 +56,12 @@ export default function HomePage() {
             {topics.map((topic) => (
               <div
                 key={topic.id}
-                className="p-4 bg-white border rounded-lg hover:shadow-md transition flex justify-between items-center"
+                className="p-4 bg-[#141414] border border-gray-800 rounded-lg hover:border-gray-600 transition flex justify-between items-center"
               >
                 <div className="space-y-1">
                   <Link
                     href={`/topics/${topic.id}`}
-                    className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition"
+                    className="text-lg font-semibold text-gray-200 hover:text-gray-100 transition"
                   >
                     {topic.title}
                   </Link>
@@ -73,8 +73,8 @@ export default function HomePage() {
                 </div>
 
                 <div className="flex items-center space-x-4 text-xs text-gray-500 shrink-0">
-                  <span className="bg-gray-100 px-2 py-1 rounded">浏览 {topic.view_count}</span>
-                  <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded">回复 {topic.reply_count}</span>
+                  <span className="bg-gray-800 px-2 py-1 rounded">浏览 {topic.view_count}</span>
+                  <span className="bg-gray-800 text-gray-300 px-2 py-1 rounded">回复 {topic.reply_count}</span>
                 </div>
               </div>
             ))}

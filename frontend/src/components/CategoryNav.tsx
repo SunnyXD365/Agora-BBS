@@ -25,7 +25,7 @@ export default function CategoryNav() {
   }, []);
 
   if (loading) {
-    return <div className="text-sm text-gray-400">板块加载中...</div>;
+    return <div className="text-sm text-gray-500">板块加载中...</div>;
   }
 
   return (
@@ -34,7 +34,7 @@ export default function CategoryNav() {
         <Link
           key={cat.id}
           href={`/categories/${cat.slug}`}
-          className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-blue-50 hover:text-blue-600 transition"
+          className="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-full text-sm hover:bg-gray-700 hover:text-gray-100 transition"
         >
           {cat.name}
         </Link>

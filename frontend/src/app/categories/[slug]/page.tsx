@@ -40,18 +40,18 @@ export default function CategoryPage({ params }: { params: Promise<{ slug: strin
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="bg-white p-6 border rounded-lg shadow-sm">
-        <h1 className="text-2xl font-bold text-gray-900">{category.name}</h1>
+      <div className="bg-[#141414] p-6 border border-gray-800 rounded-lg">
+        <h1 className="text-2xl font-bold text-gray-200">{category.name}</h1>
         {category.description && (
           <p className="mt-2 text-sm text-gray-500">{category.description}</p>
         )}
       </div>
 
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900">主题列表</h2>
+        <h2 className="text-lg font-bold text-gray-200">主题列表</h2>
         <Link
           href={`/topics/new?category_id=${category.id}`}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition"
+          className="px-4 py-2 bg-gray-700 text-gray-100 rounded-md text-sm font-medium hover:bg-gray-600 transition"
         >
           发布新主题
         </Link>
@@ -59,7 +59,7 @@ export default function CategoryPage({ params }: { params: Promise<{ slug: strin
 
       <div className="space-y-3">
         {topics.length === 0 ? (
-          <div className="p-6 bg-white border rounded-lg text-center text-gray-400 text-sm">
+          <div className="p-6 bg-[#141414] border border-gray-800 rounded-lg text-center text-gray-500 text-sm">
             该板块暂无主题，快来发布第一个吧！
           </div>
         ) : (
@@ -67,11 +67,11 @@ export default function CategoryPage({ params }: { params: Promise<{ slug: strin
             <Link
               key={topic.id}
               href={`/topics/${topic.id}`}
-              className="block p-4 bg-white border rounded-lg shadow-sm hover:shadow-md transition"
+              className="block p-4 bg-[#141414] border border-gray-800 rounded-lg hover:border-gray-600 transition"
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-gray-900 truncate">{topic.title}</h3>
-                <span className="text-xs text-gray-400 shrink-0 ml-4">
+                <h3 className="text-base font-semibold text-gray-200 truncate">{topic.title}</h3>
+                <span className="text-xs text-gray-500 shrink-0 ml-4">
                   {new Date(topic.created_at).toLocaleDateString()}
                 </span>
               </div>
