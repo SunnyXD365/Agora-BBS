@@ -78,7 +78,7 @@ export default function TopicDetailPage({ params }: { params: Promise<{ id: stri
         
         <div className="flex items-center space-x-4 text-xs text-gray-500 border-b pb-4">
           <span className="font-semibold text-gray-700">
-            {topic.author_name || `用户 #${topic.author_id}`}
+            {`用户 #${topic.author_id}`}
           </span>
           <span>•</span>
           <span>发布于 {new Date(topic.created_at).toLocaleString()}</span>

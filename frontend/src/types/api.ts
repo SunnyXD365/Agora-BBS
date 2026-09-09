@@ -27,6 +27,7 @@ export interface User {
   username: string;
   email?: string;
   trust_score: number;
+  unlock_level?: number;
   created_at?: string;
 }
 
