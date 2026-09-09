@@ -4,6 +4,9 @@ CREATE TABLE users (
     username VARCHAR(64) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(128) DEFAULT '',
+    avatar VARCHAR(255) DEFAULT '',          -- 头像 URL
+    role VARCHAR(32) DEFAULT 'user',         -- 角色：admin/user
+    status VARCHAR(32) DEFAULT 'active',     -- 状态：active/banned
     trust_score INT DEFAULT 100,             -- [扩展钩子] 中期忽略，后期启用信任机制
     unlock_level INT DEFAULT 1,              -- [扩展钩子] 中期忽略，后期控权
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -23,6 +26,7 @@ CREATE TABLE topics (
     id BIGSERIAL PRIMARY KEY,
     category_id INT NOT NULL REFERENCES categories(id),
     author_id BIGINT NOT NULL REFERENCES users(id),
+    author_name VARCHAR(64) DEFAULT '',      -- 冗余作者名，方便前端展示
     title VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,                   -- [传统论坛] 普通富文本/Markdown 贴文
     structured_content JSONB DEFAULT '{}',   -- [扩展钩子] 后期存观点/论据等结构化数据
@@ -38,6 +42,7 @@ CREATE TABLE posts (
     id BIGSERIAL PRIMARY KEY,
     topic_id BIGINT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
     author_id BIGINT NOT NULL REFERENCES users(id),
+    author_name VARCHAR(64) DEFAULT '',      -- 冗余作者名
     parent_id BIGINT DEFAULT NULL REFERENCES posts(id), -- 支持楼中楼嵌套
     content TEXT NOT NULL,
     post_type VARCHAR(32) DEFAULT 'reply',   -- [扩展钩子] 后期可填 debate/evidence
