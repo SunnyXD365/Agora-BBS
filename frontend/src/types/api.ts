@@ -54,7 +54,9 @@ export interface Post {
   content: string;
   post_type: 'reply' | 'topic' | string;// 这里和数据库的意图不同
   status: 'published' | 'hidden' | string;// 这里和数据库的意图不同
+  cooling_ends_at?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 /**
