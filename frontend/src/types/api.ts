@@ -21,6 +21,7 @@ export interface PaginatedData<T> {
 /**
  * 业务数据实体
  */
+// 没有完全实现数据库字段
 export interface User {
   id: number;
   username: string;
@@ -33,11 +34,11 @@ export interface Topic {
   id: number;
   category_id: number;
   author_id: number;
-  author_name?: string;
+  author_name?: string;// 这个可以通过id查询
   title: string;
   content?: string;
-  structured_content?: string;
-  status: 'published' | 'draft' | 'archived' | string;
+  structured_content?: string;// 格式有待考查
+  status: 'published' | 'draft' | 'archived' | string;// 这里和数据库的意图不同
   view_count: number;
   reply_count: number;
   created_at: string;
@@ -50,8 +51,8 @@ export interface Post {
   author_id: number;
   parent_id: number | null;
   content: string;
-  post_type: 'reply' | 'topic' | string;
-  status: 'published' | 'hidden' | string;
+  post_type: 'reply' | 'topic' | string;// 这里和数据库的意图不同
+  status: 'published' | 'hidden' | string;// 这里和数据库的意图不同
   created_at: string;
 }
 
@@ -89,7 +90,7 @@ export interface CreateTopicParams {
   content: string;
 }
 
-// 3. Posts 模块
+// Posts 模块
 export interface CreatePostParams {
   parent_id: number | null;
   content: string;
