@@ -1,6 +1,3 @@
-/**
- * 通用响应结构
- */
 export interface ApiResponse<T = any> {
   code: number;
   message: string;
@@ -18,14 +15,11 @@ export interface PaginatedData<T> {
   pagination: Pagination;
 }
 
-/**
- * 业务数据实体
- */
-// 没有完全实现数据库字段
 export interface User {
   id: number;
   username: string;
   email?: string;
+  avatar?: string;
   trust_score: number;
   unlock_level?: number;
   created_at?: string;
@@ -44,14 +38,16 @@ export interface Category {
 export interface Topic {
   id: number;
   category_id: number;
-  author_id: number;
-  author_name?: string;// 这个可以通过id查询
+  user_id: number;
+  author_name?: string;
   title: string;
-  content?: string;
-  structured_content?: string;// 格式有待考查
-  status: 'published' | 'draft' | 'archived' | string;// 这里和数据库的意图不同
+  content: string;
   view_count: number;
-  reply_count: number;
+  post_count: number;
+  like_count: number;
+  is_sticky: boolean;
+  is_essence: boolean;
+  status: string;
   created_at: string;
   updated_at?: string;
 }
@@ -59,23 +55,19 @@ export interface Topic {
 export interface Post {
   id: number;
   topic_id: number;
-  author_id: number;
+  user_id: number;
   author_name?: string;
+  author_avatar?: string;
   parent_id: number | null;
   content: string;
-  post_type: 'reply' | 'topic' | string;// 这里和数据库的意图不同
-  status: 'published' | 'hidden' | string;// 这里和数据库的意图不同
-  cooling_ends_at?: string | null;
+  like_count: number;
+  status: string;
   created_at: string;
   updated_at?: string;
-  children?: Post[]; // 用于前端构建树形结构
+  children?: Post[];
 }
 
-/**
- * 请求/响应 DTO
- */
-
-// Auth 模块
+// Request DTOs
 export interface RegisterParams {
   username: string;
   password: string;
@@ -92,7 +84,6 @@ export interface LoginResponseData {
   user: User;
 }
 
-// Topics 模块
 export interface GetTopicsParams {
   page?: number;
   page_size?: number;
@@ -105,8 +96,8 @@ export interface CreateTopicParams {
   content: string;
 }
 
-// Posts 模块
 export interface CreatePostParams {
-  parent_id: number | null;
+  topic_id: number;
+  parent_id?: number | null;
   content: string;
 }
