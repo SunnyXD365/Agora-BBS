@@ -2,60 +2,64 @@ package main
 
 import (
 	"log"
-	"os"
 
-	"agora-backend/internal/dao"
-	"agora-backend/internal/db"
-	"agora-backend/internal/handler"
-	"agora-backend/internal/router"
-	"agora-backend/internal/service"
-
-	"go.temporal.io/sdk/client"
+	"Agora-BBS/internal/config"
+	"Agora-BBS/internal/dao"
+	"Agora-BBS/internal/db"
+	"Agora-BBS/internal/handler"
+	"Agora-BBS/internal/router"
+	"Agora-BBS/internal/service"
 )
 
 func main() {
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://agora_user:agora_password@agora-postgres:5432/agora_db?sslmode=disable"
-	}
+	cfg := config.LoadConfig()
+	log.Printf("[Init] Config loaded, API port: %s", cfg.Port)
 
-	migrationsPath := os.Getenv("MIGRATIONS_PATH")
-	if migrationsPath == "" {
-		migrationsPath = "migrations"
-	}
-
-	temporalHost := os.Getenv("TEMPORAL_HOST")
-	if temporalHost == "" {
-		temporalHost = "agora-temporal:7233"
-	}
-
-	// 执行数据库 Migration
-	if err := db.RunMigrations(dbURL, migrationsPath); err != nil {
-		log.Fatalf("Migration 失败: %v", err)
-	}
-
-	// 初始化 GORM
-	gormDB, err := db.InitGORM(dbURL)
+	database, err := db.InitDB(cfg.DBDSN)
 	if err != nil {
-		log.Fatalf("数据库连接失败: %v", err)
+		log.Fatalf("[Error] Failed to initialize database: %v", err)
 	}
+	defer database.Close()
+	log.Println("[Init] PostgreSQL connected successfully.")
 
-	// 初始化 Temporal Client
-	temporalClient, err := client.Dial(client.Options{HostPort: temporalHost})
-	if err != nil {
-		log.Fatalf("连接 Temporal 失败: %v", err)
+	if err := db.RunMigrations(cfg.DBDSN); err != nil {
+		log.Fatalf("[Error] Database migration failed: %v", err)
 	}
-	defer temporalClient.Close()
+	// 1. DAO 初始化
+	userDAO := dao.NewUserDAO(database)
+	categoryDAO := dao.NewCategoryDAO(database)
+	topicDAO := dao.NewTopicDAO(database)
+	postDAO := dao.NewPostDAO(database)
+	likeDAO := dao.NewLikeDAO(database)
 
-	// 依赖注入 (DAO -> Service -> Handler)
-	topicDAO := dao.NewTopicDAO(gormDB)
-	topicService := service.NewTopicService(topicDAO, temporalClient)
+	// 2. Service 初始化
+	authService := service.NewAuthService(userDAO, cfg)
+	categoryService := service.CategoryServiceFactory(categoryDAO)
+	topicService := service.NewTopicService(topicDAO, categoryDAO)
+	postService := service.NewPostService(postDAO, topicDAO)
+	likeService := service.NewLikeService(likeDAO, topicDAO, postDAO)
+
+	// 3. Handler 初始化
+	authHandler := handler.NewAuthHandler(authService)
+	categoryHandler := handler.NewCategoryHandler(categoryService)
 	topicHandler := handler.NewTopicHandler(topicService)
+	postHandler := handler.NewPostHandler(postService)
+	likeHandler := handler.NewLikeHandler(likeService)
 
-	// 启动 Gin HTTP 服务
-	r := router.SetupRouter(topicHandler)
-	log.Println("API 服务器正在监听 :8080...")
-	if err := r.Run(":8080"); err != nil {
-		log.Fatalf("服务器启动失败: %v", err)
+	// 4. 路由与 HTTP 服务启动
+	handlers := &router.Handlers{
+		AuthHandler:     authHandler,
+		CategoryHandler: categoryHandler,
+		TopicHandler:    topicHandler,
+		PostHandler:     postHandler,
+		LikeHandler:     likeHandler,
+	}
+
+	r := router.SetupRouter(cfg, handlers)
+
+	serverAddr := ":" + cfg.Port
+	log.Printf("[Ready] Agora-BBS API server running on %s", serverAddr)
+	if err := r.Run(serverAddr); err != nil {
+		log.Fatalf("[Fatal] Server forced to shutdown: %v", err)
 	}
 }

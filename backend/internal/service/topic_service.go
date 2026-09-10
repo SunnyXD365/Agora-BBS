@@ -2,61 +2,71 @@ package service
 
 import (
 	"context"
+	"errors"
 
-	"agora-backend/internal/dao"
-	"agora-backend/internal/model"
-	wf "agora-backend/internal/workflow"
-
-	"go.temporal.io/sdk/client"
+	"Agora-BBS/internal/dao"
+	"Agora-BBS/internal/model"
 )
 
-type CreateTopicReq struct {
-	CategoryID int32  `json:"category_id" binding:"required"`
-	Title      string `json:"title" binding:"required,min=3,max=255"`
-	Content    string `json:"content" binding:"required,min=5"`
-}
-
 type TopicService struct {
-	topicDAO       *dao.TopicDAO
-	temporalClient client.Client
+	topicDAO    *dao.TopicDAO
+	categoryDAO *dao.CategoryDAO
 }
 
-func NewTopicService(topicDAO *dao.TopicDAO, temporalClient client.Client) *TopicService {
+func NewTopicService(topicDAO *dao.TopicDAO, categoryDAO *dao.CategoryDAO) *TopicService {
 	return &TopicService{
-		topicDAO:       topicDAO,
-		temporalClient: temporalClient,
+		topicDAO:    topicDAO,
+		categoryDAO: categoryDAO,
 	}
 }
 
-func (s *TopicService) CreateTopic(ctx context.Context, authorID int64, req *CreateTopicReq) (*model.Topic, error) {
-	topic := &model.Topic{
-		CategoryID:        req.CategoryID,
-		AuthorID:          authorID,
-		Title:             req.Title,
-		Content:           req.Content,
-		StructuredContent: "{}",
-		Status:            "published",
-	}
-
-	// 写入数据库
-	if err := s.topicDAO.Create(ctx, topic); err != nil {
+func (s *TopicService) CreateTopic(ctx context.Context, userID int64, req *model.CreateTopicReq) (*model.Topic, error) {
+	// 校验板块是否存在
+	cat, err := s.categoryDAO.GetByID(ctx, req.CategoryID)
+	if err != nil {
 		return nil, err
 	}
-
-	// 触发 Temporal 异步审核工作流
-	workflowOptions := client.StartWorkflowOptions{
-		TaskQueue: wf.TaskQueueName,
-	}
-	auditInput := wf.TopicAuditInput{
-		TopicID: topic.ID,
-		Title:   topic.Title,
-		Content: topic.Content,
+	if cat == nil {
+		return nil, errors.New("category not found")
 	}
 
-	_, err := s.temporalClient.ExecuteWorkflow(ctx, workflowOptions, wf.TopicAuditWorkflow, auditInput)
+	t := &model.Topic{
+		CategoryID: req.CategoryID,
+		UserID:     userID,
+		Title:      req.Title,
+		Content:    req.Content,
+		Status:     "normal",
+	}
+	if err := s.topicDAO.Create(ctx, t); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+func (s *TopicService) ListTopics(ctx context.Context, req *model.TopicListReq) ([]*model.Topic, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 20
+	}
+	offset := (req.Page - 1) * req.PageSize
+	return s.topicDAO.List(ctx, req.CategoryID, offset, req.PageSize)
+}
+
+func (s *TopicService) GetTopicDetail(ctx context.Context, id int64) (*model.Topic, error) {
+	t, err := s.topicDAO.GetByID(ctx, id)
 	if err != nil {
-		// 注意：此处仅记录日志或报警，不影响主流程响应
+		return nil, err
+	}
+	if t == nil {
+		return nil, errors.New("topic not found")
 	}
 
-	return topic, nil
+	// 异步更新浏览量
+	go func() {
+		_ = s.topicDAO.IncrementViewCount(context.Background(), id)
+	}()
+
+	return t, nil
 }

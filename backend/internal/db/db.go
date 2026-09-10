@@ -1,48 +1,32 @@
 package db
 
 import (
-	"errors"
+	"context"
+	"database/sql"
 	"fmt"
-	"log"
+	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	_ "github.com/lib/pq"
 )
 
-// 读取指定目录的 sql 脚本并自动执行版本升迁
-func RunMigrations(dbURL string, migrationsPath string) error {
-	sourceURL := fmt.Sprintf("file://%s", migrationsPath)
-
-	m, err := migrate.New(sourceURL, dbURL)
+// InitDB 初始化 PostgreSQL 连接池
+func InitDB(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		return fmt.Errorf("初始化 migrate 实例失败: %w", err)
-	}
-	defer m.Close()
-
-	err = m.Up()
-	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("执行数据库 Migration 失败: %w", err)
+		return nil, fmt.Errorf("open db error: %w", err)
 	}
 
-	if errors.Is(err, migrate.ErrNoChange) {
-		log.Println("[Migration] 数据库已是最新版本，无需更新。")
-	} else {
-		log.Println("[Migration] 数据库结构自动迁移成功！")
+	// 针对 1000+ QPS 调优连接池配置
+	db.SetMaxOpenConns(100)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("ping db error: %w", err)
 	}
 
-	return nil
-}
-
-// 初始化 GORM 数据库连接
-func InitGORM(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("数据库连接失败: %w", err)
-	}
-
-	log.Println("[Database] PostgreSQL 连接成功。")
 	return db, nil
 }

@@ -14,13 +14,13 @@ type Response struct {
 
 func Success(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusOK, Response{
-		Code:    200,
+		Code:    0,
 		Message: "success",
 		Data:    data,
 	})
 }
 
-func Fail(c *gin.Context, httpCode int, errCode int, msg string) {
+func Error(c *gin.Context, httpCode int, errCode int, msg string) {
 	c.JSON(httpCode, Response{
 		Code:    errCode,
 		Message: msg,
