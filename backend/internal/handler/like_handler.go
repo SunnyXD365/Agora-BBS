@@ -4,35 +4,49 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-
-	"Agora-BBS/internal/model"
-	"Agora-BBS/internal/pkg/response"
-	"Agora-BBS/internal/service"
+	"agora-backend/internal/model"
+	"agora-backend/internal/service"
+	"agora-backend/internal/pkg/response"
 )
 
 type LikeHandler struct {
 	likeService *service.LikeService
 }
 
-func NewLikeHandler(s *service.LikeService) *LikeHandler {
-	return &LikeHandler{likeService: s}
+func NewLikeHandler(likeService *service.LikeService) *LikeHandler {
+	return &LikeHandler{likeService: likeService}
 }
 
-func (h *LikeHandler) Toggle(c *gin.Context) {
-	userIDVal, _ := c.Get("current_user_id")
-	userID := userIDVal.(int64)
-
+func (h *LikeHandler) Like(c *gin.Context) {
+	userID := c.GetInt64("userID")
 	var req model.ToggleLikeReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, 40001, err.Error())
+		response.Error(c, http.StatusBadRequest, 40001, "invalid request body")
 		return
 	}
 
-	resp, err := h.likeService.ToggleLike(c.Request.Context(), userID, &req)
-	if err != nil {
+	// 传递 &req 取指针
+	if err := h.likeService.Like(c.Request.Context(), userID, &req); err != nil {
 		response.Error(c, http.StatusBadRequest, 40002, err.Error())
 		return
 	}
 
-	response.Success(c, resp)
+	response.Success(c, gin.H{"status": "liked"})
+}
+
+func (h *LikeHandler) Unlike(c *gin.Context) {
+	userID := c.GetInt64("userID")
+	var req model.ToggleLikeReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, 40001, "invalid request body")
+		return
+	}
+
+	// 传递 &req 取指针
+	if err := h.likeService.Unlike(c.Request.Context(), userID, &req); err != nil {
+		response.Error(c, http.StatusBadRequest, 40002, err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{"status": "unliked"})
 }

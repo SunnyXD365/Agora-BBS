@@ -3,49 +3,56 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 
-	"Agora-BBS/internal/config"
-	"Agora-BBS/internal/handler"
-	"Agora-BBS/internal/middleware"
+	"agora-backend/internal/config"
+	"agora-backend/internal/handler"
+	"agora-backend/internal/middleware"
 )
 
 type Handlers struct {
-	AuthHandler     *handler.AuthHandler
+	UserHandler     *handler.UserHandler
 	CategoryHandler *handler.CategoryHandler
 	TopicHandler    *handler.TopicHandler
 	PostHandler     *handler.PostHandler
 	LikeHandler     *handler.LikeHandler
 }
 
-func SetupRouter(cfg *config.Config, handlers *Handlers) *gin.Engine {
+func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
 	r := gin.Default()
 
-	api := r.Group("/api")
+	v1 := r.Group("/api/v1")
 	{
-		api.GET("/ping", func(c *gin.Context) {
-			c.JSON(200, gin.H{"message": "pong", "status": "healthy"})
+		// 健康检查
+		v1.GET("/ping", func(c *gin.Context) {
+			c.JSON(200, gin.H{"status": "ok"})
 		})
 
-		// 认证公开接口
-		authGroup := api.Group("/auth")
+		// 1. 公开路由
+		auth := v1.Group("/auth")
 		{
-			authGroup.POST("/register", handlers.AuthHandler.Register)
-			authGroup.POST("/login", handlers.AuthHandler.Login)
+			auth.POST("/register", h.UserHandler.Register)
+			auth.POST("/login", h.UserHandler.Login)
 		}
 
-		// 公开只读接口
-		api.GET("/categories", handlers.CategoryHandler.List)
-		api.GET("/topics", handlers.TopicHandler.List)
-		api.GET("/topics/:id", handlers.TopicHandler.GetDetail)
+		v1.GET("/categories", h.CategoryHandler.ListCategories)
 
-		// 受保护接口 (JWT 认证)
-		protected := api.Group("")
+		topics := v1.Group("/topics")
+		{
+			topics.GET("", h.TopicHandler.ListTopics)
+			topics.GET("/:id", h.TopicHandler.GetTopicDetail)
+			topics.GET("/:id/posts", h.PostHandler.ListPosts)
+		}
+
+		// 2. 受保护路由
+		protected := v1.Group("")
 		protected.Use(middleware.JWTAuth(cfg.JWTSecret))
 		{
-			protected.GET("/auth/me", handlers.AuthHandler.GetMe)
-			protected.POST("/categories", handlers.CategoryHandler.Create)
-			protected.POST("/topics", handlers.TopicHandler.Create)
-			protected.POST("/posts", handlers.PostHandler.Create)   // 发布回复
-			protected.POST("/likes/toggle", handlers.LikeHandler.Toggle) // 点赞/取消点赞
+			protected.GET("/users/me", h.UserHandler.GetProfile)
+
+			protected.POST("/topics", h.TopicHandler.CreateTopic)
+			protected.POST("/topics/:id/posts", h.PostHandler.CreatePost)
+
+			protected.POST("/likes", h.LikeHandler.Like)
+			protected.DELETE("/likes", h.LikeHandler.Unlike)
 		}
 	}
 

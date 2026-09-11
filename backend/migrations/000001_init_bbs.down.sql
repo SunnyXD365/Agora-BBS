@@ -1,4 +1,6 @@
-DROP TABLE IF EXISTS interactions;
+-- 000001_init_bbs.down.sql
+
+DROP TABLE IF EXISTS likes;
 DROP TABLE IF EXISTS posts;
 DROP TABLE IF EXISTS topics;
 DROP TABLE IF EXISTS categories;

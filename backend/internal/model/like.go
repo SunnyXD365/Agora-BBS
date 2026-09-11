@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// Like 对应 likes 表 (点赞记录)
+// Like 对应 likes 表
 type Like struct {
 	ID         int64     `db:"id" json:"id"`
 	UserID     int64     `db:"user_id" json:"user_id"`
@@ -11,7 +11,7 @@ type Like struct {
 	CreatedAt  time.Time `db:"created_at" json:"created_at"`
 }
 
-// ToggleLikeReq 点赞/取消点赞 DTO
+// ToggleLikeReq 点赞/取消点赞请求 DTO
 type ToggleLikeReq struct {
 	TargetType string `json:"target_type" binding:"required,oneof=topic post"`
 	TargetID   int64  `json:"target_id" binding:"required"`

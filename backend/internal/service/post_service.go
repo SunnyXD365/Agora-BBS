@@ -2,59 +2,44 @@ package service
 
 import (
 	"context"
-	"errors"
 
-	"Agora-BBS/internal/dao"
-	"Agora-BBS/internal/model"
+	"agora-backend/internal/dao"
+	"agora-backend/internal/model"
 )
 
 type PostService struct {
-	postDAO  *dao.PostDAO
-	topicDAO *dao.TopicDAO
+	postDAO *dao.PostDAO
 }
 
-func NewPostService(postDAO *dao.PostDAO, topicDAO *dao.TopicDAO) *PostService {
-	return &PostService{
-		postDAO:  postDAO,
-		topicDAO: topicDAO,
-	}
+func NewPostService(postDAO *dao.PostDAO) *PostService {
+	return &PostService{postDAO: postDAO}
 }
 
-func (s *PostService) CreatePost(ctx context.Context, userID int64, req *model.CreatePostReq) (*model.Post, error) {
-	// 校验帖子是否存在
-	topic, err := s.topicDAO.GetByID(ctx, req.TopicID)
-	if err != nil {
-		return nil, err
-	}
-	if topic == nil {
-		return nil, errors.New("topic not found")
-	}
-
-	p := &model.Post{
+func (s *PostService) CreatePost(ctx context.Context, userID int64, req *model.CreatePostReq) (int64, error) {
+	post := &model.Post{
 		TopicID:  req.TopicID,
 		UserID:   userID,
 		ParentID: req.ParentID,
 		Content:  req.Content,
-		Status:   "normal",
 	}
-
-	if err := s.postDAO.Create(ctx, p); err != nil {
-		return nil, err
+	if err := s.postDAO.CreatePost(ctx, post); err != nil {
+		return 0, err
 	}
-
-	// 增加主帖的 post_count
-	_ = s.topicDAO.IncrementPostCount(ctx, req.TopicID)
-
-	return p, nil
+	return post.ID, nil
 }
 
-func (s *PostService) ListPosts(ctx context.Context, req *model.PostListReq) ([]*model.Post, error) {
-	if req.Page <= 0 {
-		req.Page = 1
+func (s *PostService) ListPosts(ctx context.Context, topicID int64, page, pageSize int) ([]*model.Post, error) {
+	if page <= 0 {
+		page = 1
 	}
-	if req.PageSize <= 0 || req.PageSize > 100 {
-		req.PageSize = 20
+	if pageSize <= 0 || pageSize > 50 {
+		pageSize = 20
 	}
-	offset := (req.Page - 1) * req.PageSize
-	return s.postDAO.ListByTopic(ctx, req.TopicID, offset, req.PageSize)
+
+	// 保持参数位置正确：(ctx, topicID, page, pageSize)
+	posts, err := s.postDAO.ListPostsByTopicID(ctx, topicID, page, pageSize)
+	if err != nil {
+		return make([]*model.Post, 0), err
+	}
+	return posts, nil
 }

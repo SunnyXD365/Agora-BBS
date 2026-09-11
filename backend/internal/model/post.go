@@ -2,30 +2,29 @@ package model
 
 import "time"
 
-// Post 对应 posts 表 (帖子回复/评论)
 type Post struct {
-	ID         int64     `db:"id" json:"id"`
-	TopicID    int64     `db:"topic_id" json:"topic_id"`
-	UserID     int64     `db:"user_id" json:"user_id"`
-	ParentID   *int64    `db:"parent_id" json:"parent_id"`
-	Content    string    `db:"content" json:"content"`
-	LikeCount  int       `db:"like_count" json:"like_count"`
-	Status     string    `db:"status" json:"status"`
-	CreatedAt  time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt  time.Time `db:"updated_at" json:"updated_at"`
+	ID           int64     `json:"id" db:"id"`
+	TopicID      int64     `json:"topic_id" db:"topic_id"`
+	UserID       int64     `json:"user_id" db:"user_id"`
+	ParentID     *int64    `json:"parent_id" db:"parent_id"`
+	Content      string    `json:"content" db:"content"`
+	LikeCount    int       `json:"like_count" db:"like_count"`
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 
-	AuthorName   string `db:"author_name" json:"author_name,omitempty"`
-	AuthorAvatar string `db:"author_avatar" json:"author_avatar,omitempty"`
+	// 联表查询拓展字段（非物理表字段）
+	AuthorName   string    `json:"author_name,omitempty" db:"author_name"`
+	AuthorAvatar string    `json:"author_avatar,omitempty" db:"author_avatar"`
 }
 
-// CreatePostReq 发布回复 DTO
+// CreatePostReq 发布回复请求 DTO
 type CreatePostReq struct {
-	TopicID  int64  `json:"topic_id" binding:"required"`
-	ParentID *int64 `json:"parent_id"` // 可选：楼中楼回复
+	TopicID  int64  `json:"topic_id"`
+	ParentID *int64 `json:"parent_id"` // 可选：多级回复的父回复 ID
 	Content  string `json:"content" binding:"required,min=1"`
 }
 
-// PostListReq 回复列表筛选 DTO
+// PostListReq 回复列表请求 DTO
 type PostListReq struct {
 	TopicID  int64 `form:"topic_id" binding:"required"`
 	Page     int   `form:"page,default=1"`

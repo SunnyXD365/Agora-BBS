@@ -1,103 +1,59 @@
-export interface ApiResponse<T = any> {
+// 统一 API 响应包装
+export interface ApiResponse<T> {
   code: number;
-  message: string;
+  msg: string;
   data: T;
 }
 
-export interface Pagination {
-  page: number;
-  page_size: number;
-  total: number;
-}
-
-export interface PaginatedData<T> {
-  list: T[];
-  pagination: Pagination;
-}
-
-export interface User {
+// 用户类型
+export interface UserProfile {
   id: number;
   username: string;
-  email?: string;
-  avatar?: string;
+  email: string;
+  avatar: string;
+  role: string;
   trust_score: number;
-  unlock_level?: number;
-  created_at?: string;
-  updated_at?: string;
+  unlock_level: number;
+  created_at: string;
 }
 
+export interface AuthData {
+  token: string;
+  user: UserProfile;
+}
+
+// 板块类型
 export interface Category {
   id: number;
   name: string;
   slug: string;
-  description?: string;
-  created_at?: string;
-  updated_at?: string;
+  description: string;
+  sort_order: number;
 }
 
+// 主题帖类型
 export interface Topic {
   id: number;
   category_id: number;
   user_id: number;
-  author_name?: string;
+  author_name: string;
   title: string;
   content: string;
   view_count: number;
   post_count: number;
   like_count: number;
-  is_sticky: boolean;
-  is_essence: boolean;
-  status: string;
   created_at: string;
-  updated_at?: string;
+  updated_at: string;
 }
 
+// 回复楼层类型
 export interface Post {
   id: number;
   topic_id: number;
   user_id: number;
-  author_name?: string;
-  author_avatar?: string;
+  author_name: string;
   parent_id: number | null;
   content: string;
   like_count: number;
-  status: string;
   created_at: string;
-  updated_at?: string;
-  children?: Post[];
-}
-
-// Request DTOs
-export interface RegisterParams {
-  username: string;
-  password: string;
-  email: string;
-}
-
-export interface LoginParams {
-  username: string;
-  password: string;
-}
-
-export interface LoginResponseData {
-  token: string;
-  user: User;
-}
-
-export interface GetTopicsParams {
-  page?: number;
-  page_size?: number;
-  category_id?: number;
-}
-
-export interface CreateTopicParams {
-  category_id: number;
-  title: string;
-  content: string;
-}
-
-export interface CreatePostParams {
-  topic_id: number;
-  parent_id?: number | null;
-  content: string;
 }

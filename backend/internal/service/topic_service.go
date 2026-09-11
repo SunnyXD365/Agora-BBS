@@ -2,71 +2,55 @@ package service
 
 import (
 	"context"
-	"errors"
 
-	"Agora-BBS/internal/dao"
-	"Agora-BBS/internal/model"
+	"agora-backend/internal/dao"
+	"agora-backend/internal/model"
 )
 
 type TopicService struct {
-	topicDAO    *dao.TopicDAO
-	categoryDAO *dao.CategoryDAO
+	topicDAO *dao.TopicDAO
 }
 
-func NewTopicService(topicDAO *dao.TopicDAO, categoryDAO *dao.CategoryDAO) *TopicService {
-	return &TopicService{
-		topicDAO:    topicDAO,
-		categoryDAO: categoryDAO,
-	}
+func NewTopicService(topicDAO *dao.TopicDAO) *TopicService {
+	return &TopicService{topicDAO: topicDAO}
 }
 
-func (s *TopicService) CreateTopic(ctx context.Context, userID int64, req *model.CreateTopicReq) (*model.Topic, error) {
-	// 校验板块是否存在
-	cat, err := s.categoryDAO.GetByID(ctx, req.CategoryID)
-	if err != nil {
-		return nil, err
-	}
-	if cat == nil {
-		return nil, errors.New("category not found")
-	}
-
-	t := &model.Topic{
+func (s *TopicService) CreateTopic(ctx context.Context, userID int64, req *model.CreateTopicReq) (int64, error) {
+	topic := &model.Topic{
 		CategoryID: req.CategoryID,
 		UserID:     userID,
 		Title:      req.Title,
 		Content:    req.Content,
-		Status:     "normal",
 	}
-	if err := s.topicDAO.Create(ctx, t); err != nil {
+	if err := s.topicDAO.CreateTopic(ctx, topic); err != nil {
+		return 0, err
+	}
+	return topic.ID, nil
+}
+
+func (s *TopicService) GetTopicDetail(ctx context.Context, topicID int64) (*model.Topic, error) {
+	topic, err := s.topicDAO.GetTopicByID(ctx, topicID)
+	if err != nil {
 		return nil, err
 	}
-	return t, nil
+
+	// 触发浏览量自增
+	_ = s.topicDAO.IncrementViewCount(ctx, topicID)
+	return topic, nil
 }
 
 func (s *TopicService) ListTopics(ctx context.Context, req *model.TopicListReq) ([]*model.Topic, error) {
 	if req.Page <= 0 {
 		req.Page = 1
 	}
-	if req.PageSize <= 0 || req.PageSize > 100 {
+	if req.PageSize <= 0 || req.PageSize > 50 {
 		req.PageSize = 20
 	}
-	offset := (req.Page - 1) * req.PageSize
-	return s.topicDAO.List(ctx, req.CategoryID, offset, req.PageSize)
-}
 
-func (s *TopicService) GetTopicDetail(ctx context.Context, id int64) (*model.Topic, error) {
-	t, err := s.topicDAO.GetByID(ctx, id)
+	// 保持参数位置正确：(ctx, categoryID, page, pageSize)
+	topics, err := s.topicDAO.ListTopicsByCategoryID(ctx, req.CategoryID, req.Page, req.PageSize)
 	if err != nil {
-		return nil, err
+		return make([]*model.Topic, 0), err
 	}
-	if t == nil {
-		return nil, errors.New("topic not found")
-	}
-
-	// 异步更新浏览量
-	go func() {
-		_ = s.topicDAO.IncrementViewCount(context.Background(), id)
-	}()
-
-	return t, nil
+	return topics, nil
 }

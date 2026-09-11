@@ -1,80 +1,67 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, LoginParams, RegisterParams } from '@/types/api';
-import { authApi, setToken, removeToken, getToken } from '@/lib/api';
-import { useRouter } from 'next/navigation';
-
-const USER_KEY = 'agora_user_info';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { UserProfile } from '@/types/api';
+import { authApi } from '@/services';
 
 interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  login: (params: LoginParams) => Promise<void>;
-  register: (params: RegisterParams) => Promise<void>;
+  user: UserProfile | null;
+  token: string | null;
+  isLoading: boolean;
+  login: (token: string, user: UserProfile) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 初始化检查本地用户数据
+  // 初始化：自动恢复登录态
   useEffect(() => {
-    const token = getToken();
-    const savedUser = localStorage.getItem(USER_KEY);
-    if (token && savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (e) {
-        console.error('Failed to parse cached user:', e);
-        removeToken();
-        localStorage.removeItem(USER_KEY);
-      }
+    const savedToken = localStorage.getItem('token');
+    if (savedToken) {
+      setToken(savedToken);
+      authApi.getMe()
+        .then((res) => {
+          if (res.code === 0) {
+            setUser(res.data);
+          } else {
+            logout();
+          }
+        })
+        .catch(() => logout())
+        .finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
     }
-    setLoading(false);
   }, []);
 
-  // 登录
-  const login = async (params: LoginParams) => {
-    const res = await authApi.login(params);
-    const { token, user: userData } = res.data;
-    
-    setToken(token);
-    localStorage.setItem(USER_KEY, JSON.stringify(userData));
-    setUser(userData);
-    router.push('/');
+  const login = (newToken: string, newUser: UserProfile) => {
+    localStorage.setItem('token', newToken);
+    setToken(newToken);
+    setUser(newUser);
   };
 
-  // 注册（注册成功后直接自动登录或引导跳转）
-  const register = async (params: RegisterParams) => {
-    await authApi.register(params);
-    // 注册完成后自动登录
-    await login({ username: params.username, password: params.password });
-  };
-
-  // 退出登录
   const logout = () => {
-    removeToken();
-    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem('token');
+    setToken(null);
     setUser(null);
-    router.push('/login');
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
+};
