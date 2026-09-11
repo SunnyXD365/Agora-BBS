@@ -45,3 +45,8 @@ type TopicListReq struct {
 	Page       int   `form:"page,default=1"`
 	PageSize   int   `form:"page_size,default=20"`
 }
+
+type UpdateTopicReq struct {
+	Title             string            `json:"title" binding:"required,min=3,max=128"`
+	StructuredContent StructuredContent `json:"structured_content" binding:"required"`
+}

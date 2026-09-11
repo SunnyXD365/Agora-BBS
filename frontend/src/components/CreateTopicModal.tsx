@@ -38,6 +38,7 @@ export default function CreateTopicModal({ isOpen, onClose, categories, onSucces
         setClaim('');
         setEvidence('');
         setUncertainty('');
+        alert(`主题已进入冷静期，将在 ${new Date(res.data.cooling_ends_at).toLocaleTimeString()} 后继续处理。`);
         onSuccess();
         onClose();
       }

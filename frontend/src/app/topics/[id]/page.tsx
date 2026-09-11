@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Post, Topic } from '@/types/api';
-import { bookmarkApi, getErrorMessage, postApi, topicApi } from '@/services';
+import { bookmarkApi, getErrorMessage, governanceApi, postApi, topicApi } from '@/services';
+import { GovernancePolicy } from '@/types/api';
 import { useAuth } from '@/context/AuthContext';
 
 type PostNode = Post & { children: PostNode[] };
@@ -24,18 +25,19 @@ function toPostTree(posts: Post[]): PostNode[] {
   return roots;
 }
 
-function PostBranch({ node, depth, onReply }: { node: PostNode; depth: number; onReply: (post: Post) => void }) {
+function PostBranch({ node, depth, onReply, onRecall, currentUserID }: { node: PostNode; depth: number; onReply: (post: Post) => void; onRecall: (post: Post) => void; currentUserID?: number }) {
   return (
     <div className={depth ? 'ml-4 border-l border-[var(--border-paper)] pl-4' : ''}>
       <article className="paper-card mb-3 rounded-xl p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
-          <div className="flex items-center gap-2"><strong className="text-gray-800">{node.author_name}</strong><span className="rounded bg-stone-100 px-2 py-0.5">{postTypeLabels[node.post_type]}</span></div>
+          <div className="flex items-center gap-2"><strong className="text-gray-800">{node.author_name}</strong><span className="rounded bg-stone-100 px-2 py-0.5">{postTypeLabels[node.post_type]}</span>{node.status === 'cooling' && <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">仅你可见 · 冷静期</span>}</div>
           <time>{new Date(node.created_at).toLocaleString()}</time>
         </div>
         <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-gray-800">{node.content}</p>
         <button onClick={() => onReply(node)} className="mt-3 text-xs font-semibold text-[var(--accent-ink)] hover:underline">回复这条发言</button>
+        {node.status === 'cooling' && node.user_id === currentUserID && <button onClick={() => onRecall(node)} className="ml-4 text-xs text-red-700 hover:underline">无痕撤回</button>}
       </article>
-      {node.children.map((child) => <PostBranch key={child.id} node={child} depth={depth + 1} onReply={onReply} />)}
+      {node.children.map((child) => <PostBranch key={child.id} node={child} depth={depth + 1} onReply={onReply} onRecall={onRecall} currentUserID={currentUserID} />)}
     </div>
   );
 }
@@ -54,6 +56,15 @@ export default function TopicDetailPage() {
   const [replyType, setReplyType] = useState<Post['post_type']>('experience');
   const [replyTo, setReplyTo] = useState<Post | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [policy, setPolicy] = useState<GovernancePolicy | null>(null);
+  const [readingSessionID, setReadingSessionID] = useState('');
+  const [readingProgress, setReadingProgress] = useState(0);
+  const [readingSeconds, setReadingSeconds] = useState(0);
+  const [readingEligible, setReadingEligible] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const progressRef = useRef(0);
+  const replyFocusedRef = useRef(false);
+  const completionStartedRef = useRef(false);
   const postTree = useMemo(() => toPostTree(posts), [posts]);
 
   useEffect(() => {
@@ -69,6 +80,54 @@ export default function TopicDetailPage() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [topicId]);
+
+  useEffect(() => {
+    const updateProgress = () => {
+      const root = document.documentElement;
+      const available = root.scrollHeight - window.innerHeight;
+      const progress = available <= 0 ? 100 : Math.min(100, Math.round((window.scrollY / available) * 100));
+      progressRef.current = Math.max(progressRef.current, progress);
+      setReadingProgress(progressRef.current);
+    };
+    updateProgress();
+    window.addEventListener('scroll', updateProgress, { passive: true });
+    return () => window.removeEventListener('scroll', updateProgress);
+  }, []);
+
+  useEffect(() => {
+    if (!user || !topic || topic.status !== 'published') return;
+    let cancelled = false;
+    Promise.all([governanceApi.policy(), governanceApi.startReading(topic.id)])
+      .then(([policyResult, sessionResult]) => {
+        if (cancelled) return;
+        setPolicy(policyResult.data);
+        setReadingSessionID(sessionResult.data.id);
+      })
+      .catch((err: unknown) => { if (!cancelled) setError(getErrorMessage(err, '阅读计时启动失败')); });
+    return () => { cancelled = true; };
+  }, [topic, user]);
+
+  useEffect(() => {
+    if (!readingSessionID || !policy) return;
+    const timer = window.setInterval(() => {
+      governanceApi.heartbeat(readingSessionID, progressRef.current, replyFocusedRef.current)
+        .then(async (result) => {
+          setReadingSeconds(result.data.reading_seconds);
+          if (result.data.bottom_reached && result.data.reply_dwell_seconds >= policy.reply_dwell_seconds && !completionStartedRef.current) {
+            completionStartedRef.current = true;
+            const completed = await governanceApi.completeReading(readingSessionID);
+            setReadingEligible(completed.data.eligible);
+          }
+        })
+        .catch(() => undefined);
+    }, policy.heartbeat_seconds * 1000);
+    return () => window.clearInterval(timer);
+  }, [policy, readingSessionID]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const refreshPosts = async () => {
     const result = await postApi.getPosts(topicId, { page: 1, page_size: 50 });
@@ -99,12 +158,27 @@ export default function TopicDetailPage() {
     finally { setSubmitting(false); }
   };
 
+  const handleRecallPost = async (post: Post) => {
+    try { await postApi.recallCooling(post.id); await refreshPosts(); }
+    catch (err: unknown) { setError(getErrorMessage(err, '撤回失败')); }
+  };
+
+  const handleRecallTopic = async () => {
+    try { await topicApi.recallCooling(topicId); router.push('/'); }
+    catch (err: unknown) { setError(getErrorMessage(err, '撤回失败')); }
+  };
+
   if (loading) return <div className="mx-auto h-48 max-w-4xl animate-pulse rounded-xl bg-stone-200" />;
   if (!topic) return <div className="paper-card rounded-xl p-12 text-center">{error || '该主题不存在或不可见。'}</div>;
+  const contentChars = `${topic.structured_content?.claim ?? topic.content}${topic.structured_content?.evidence ?? ''}${topic.structured_content?.uncertainty ?? ''}`.length;
+  const requiresReading = Boolean(policy && contentChars >= policy.long_topic_chars);
+  const canReply = Boolean(user?.capabilities.includes('reply')) && (!requiresReading || readingEligible);
+  const coolingRemaining = topic.cooling_ends_at ? Math.max(0, Math.ceil((new Date(topic.cooling_ends_at).getTime() - now) / 1000)) : 0;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {topic.status === 'cooling' && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">该主题仅你可见，冷静期剩余约 {coolingRemaining} 秒。你可以继续修改，或<button onClick={handleRecallTopic} className="ml-1 font-bold underline">无痕撤回</button>。</div>}
       <article className="paper-card rounded-xl p-6">
         <header className="border-b border-[var(--border-paper)] pb-4">
           <h1 className="text-2xl font-bold text-gray-900">{topic.title}</h1>
@@ -119,16 +193,17 @@ export default function TopicDetailPage() {
       </article>
       <section className="paper-card rounded-xl p-6">
         <h2 className="text-sm font-bold">发表回复</h2>
+        {user && <div className="mt-3 rounded-md bg-stone-100 p-3 text-xs text-[var(--text-muted)]">阅读进度 {readingProgress}% · 有效阅读 {readingSeconds} 秒{requiresReading && !readingEligible ? ` · 滚动到底并在回复框停留 ${policy?.reply_dwell_seconds ?? 0} 秒后解锁` : ' · 已满足当前阅读要求'}</div>}
         {replyTo && <div className="mt-3 rounded bg-stone-100 p-2 text-xs">正在回复 {replyTo.author_name}<button onClick={() => setReplyTo(null)} className="ml-2 underline">取消</button></div>}
         <form onSubmit={handleSubmitReply} className="mt-3 space-y-3">
           <select value={replyType} onChange={(event) => setReplyType(event.target.value as Post['post_type'])} disabled={!user} className="rounded-md border p-2 text-sm">{Object.entries(postTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <textarea rows={4} required value={replyContent} onChange={(event) => setReplyContent(event.target.value)} disabled={!user} placeholder={user ? '认真写下你的回应…' : '请先登录'} className="w-full rounded-md border p-3 text-sm" />
-          <div className="flex justify-end"><button type="submit" disabled={!user || submitting} className="paper-btn-primary rounded-md px-5 py-2 text-sm disabled:opacity-50">{submitting ? '提交中…' : '提交回复'}</button></div>
+          <textarea rows={4} required value={replyContent} onChange={(event) => setReplyContent(event.target.value)} onFocus={() => { replyFocusedRef.current = true; }} onBlur={() => { replyFocusedRef.current = false; }} disabled={!user} placeholder={user ? '认真写下你的回应…' : '请先登录'} className="w-full rounded-md border p-3 text-sm" />
+          <div className="flex justify-end"><button type="submit" disabled={!canReply || submitting} className="paper-btn-primary rounded-md px-5 py-2 text-sm disabled:opacity-50">{submitting ? '提交中…' : canReply ? '提交回复' : '回复尚未解锁'}</button></div>
         </form>
       </section>
       <section>
         <h2 className="mb-3 text-sm font-bold">全部回复（{posts.length}）</h2>
-        {postTree.length === 0 ? <div className="paper-card rounded-xl p-8 text-center text-sm text-[var(--text-muted)]">暂无回复。</div> : postTree.map((node) => <PostBranch key={node.id} node={node} depth={0} onReply={setReplyTo} />)}
+        {postTree.length === 0 ? <div className="paper-card rounded-xl p-8 text-center text-sm text-[var(--text-muted)]">暂无回复。</div> : postTree.map((node) => <PostBranch key={node.id} node={node} depth={0} onReply={setReplyTo} onRecall={handleRecallPost} currentUserID={user?.id} />)}
       </section>
     </div>
   );

@@ -22,6 +22,11 @@ export interface UserProfile {
   role: string;
   status: string;
   unlock_level: number;
+  verified_read_seconds: number;
+  capabilities: string[];
+  onboarding_statement: string;
+  background_tag: string;
+  onboarding_status: 'not_submitted' | 'pending_review' | 'approved' | 'rejected';
   created_at: string;
 }
 
@@ -86,4 +91,26 @@ export interface Bookmark {
   topic_id: number;
   created_at: string;
   topic: Topic;
+}
+
+export interface GovernancePolicy {
+  cooling_seconds: number;
+  reply_dwell_seconds: number;
+  heartbeat_seconds: number;
+  long_topic_chars: number;
+  level_1_read_seconds: number;
+  level_2_read_seconds: number;
+  level_3_read_seconds: number;
+}
+
+export interface ReadingSession {
+  id: string;
+  topic_id: number;
+  progress: number;
+  reading_seconds: number;
+  reply_dwell_seconds: number;
+  bottom_reached: boolean;
+  eligible: boolean;
+  completed: boolean;
+  last_heartbeat_at: string;
 }

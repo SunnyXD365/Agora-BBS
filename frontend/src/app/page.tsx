@@ -85,6 +85,10 @@ export default function HomePage() {
                 alert('请先登录后再发帖');
                 return;
               }
+              if (!user.capabilities.includes('create_topic')) {
+                alert('发起主题尚未解锁，请先在成长中心查看阅读进度。');
+                return;
+              }
               setIsModalOpen(true);
             }}
             className="rounded-md bg-blue-600 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition-colors"

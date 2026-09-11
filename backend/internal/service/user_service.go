@@ -49,6 +49,11 @@ func (s *UserService) Register(ctx context.Context, req *model.RegisterReq) (*mo
 	if err := s.userDAO.CreateUser(ctx, user); err != nil {
 		return nil, err
 	}
+	user, err = s.userDAO.GetUserByID(ctx, user.ID)
+	if err != nil || user == nil {
+		return nil, errors.New("failed to load created user")
+	}
+	decorateUser(user)
 
 	// 4. 颁发 JWT Token (有效期 72 小时)
 	token, err := jwt.GenerateToken(user.ID, s.jwtSecret, s.jwtExpireHours)
@@ -68,6 +73,7 @@ func (s *UserService) Login(ctx context.Context, req *model.LoginReq) (*model.Au
 	if user.Status != "active" {
 		return nil, errors.New("account is suspended")
 	}
+	decorateUser(user)
 
 	// 2. 比对密码
 	if !hash.CheckPasswordHash(req.Password, user.PasswordHash) {
@@ -84,5 +90,26 @@ func (s *UserService) Login(ctx context.Context, req *model.LoginReq) (*model.Au
 }
 
 func (s *UserService) GetProfile(ctx context.Context, userID int64) (*model.User, error) {
-	return s.userDAO.GetUserByID(ctx, userID)
+	user, err := s.userDAO.GetUserByID(ctx, userID)
+	if user != nil {
+		decorateUser(user)
+	}
+	return user, err
+}
+
+func decorateUser(user *model.User) {
+	capabilities := []string{"browse", "bookmark"}
+	if user.UnlockLevel >= 1 {
+		capabilities = append(capabilities, "reply", "feedback")
+	}
+	if user.UnlockLevel >= 2 {
+		capabilities = append(capabilities, "create_topic")
+	}
+	if user.UnlockLevel >= 3 {
+		capabilities = append(capabilities, "blind_review")
+	}
+	if user.Role == "admin" {
+		capabilities = append(capabilities, "admin")
+	}
+	user.Capabilities = capabilities
 }

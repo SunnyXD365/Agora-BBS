@@ -94,6 +94,8 @@ services:
     depends_on:
       agora-postgres:
         condition: service_healthy
+      agora-temporal:
+        condition: service_started
 
   agora-backend-worker:
     image: docker.io/library/golang:1.23-alpine

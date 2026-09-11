@@ -6,6 +6,8 @@ import {
   Category,
   PageData,
   Post,
+  GovernancePolicy,
+  ReadingSession,
   StructuredContent,
   Topic,
   UserProfile,
@@ -26,6 +28,8 @@ export const authApi = {
     api.post<ApiResponse<AuthData>, ApiResponse<AuthData>>('/auth/login', data),
   getMe: () =>
     api.get<ApiResponse<UserProfile>, ApiResponse<UserProfile>>('/users/me'),
+  saveOnboarding: (data: { statement: string; background_tag: string }) =>
+    api.put<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>('/users/me/onboarding', data),
 };
 
 export const topicApi = {
@@ -36,14 +40,22 @@ export const topicApi = {
   getTopicDetail: (id: number) =>
     api.get<ApiResponse<Topic>, ApiResponse<Topic>>(`/topics/${id}`),
   createTopic: (data: { category_id: number; title: string; content?: string; structured_content?: StructuredContent }) =>
-    api.post<ApiResponse<{ topic_id: number }>, ApiResponse<{ topic_id: number }>>('/topics', data),
+    api.post<ApiResponse<{ topic_id: number; status: string; cooling_ends_at: string }>, ApiResponse<{ topic_id: number; status: string; cooling_ends_at: string }>>('/topics', data),
+  updateCooling: (id: number, data: { title: string; structured_content: StructuredContent }) =>
+    api.patch<ApiResponse<Topic>, ApiResponse<Topic>>(`/topics/${id}`, data),
+  recallCooling: (id: number) =>
+    api.delete<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/topics/${id}`),
 };
 
 export const postApi = {
   getPosts: (topicId: number, params?: { page?: number; page_size?: number }) =>
     api.get<ApiResponse<PageData<Post>>, ApiResponse<PageData<Post>>>(`/topics/${topicId}/posts`, { params }),
   createPost: (topicId: number, data: { content: string; parent_id?: number; post_type?: Post['post_type'] }) =>
-    api.post<ApiResponse<{ post_id: number }>, ApiResponse<{ post_id: number }>>(`/topics/${topicId}/posts`, data),
+    api.post<ApiResponse<{ post_id: number; status: string; cooling_ends_at: string }>, ApiResponse<{ post_id: number; status: string; cooling_ends_at: string }>>(`/topics/${topicId}/posts`, data),
+  updateCooling: (id: number, data: { content: string; post_type: Post['post_type'] }) =>
+    api.patch<ApiResponse<Post>, ApiResponse<Post>>(`/posts/${id}`, data),
+  recallCooling: (id: number) =>
+    api.delete<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/posts/${id}`),
 };
 
 export const likeApi = {
@@ -53,6 +65,14 @@ export const likeApi = {
       ? api.post<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>('/likes', payload)
       : api.delete<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>('/likes', { data: payload });
   },
+};
+
+export const governanceApi = {
+  policy: () => api.get<ApiResponse<GovernancePolicy>, ApiResponse<GovernancePolicy>>('/governance/policy'),
+  startReading: (topicId: number) => api.post<ApiResponse<ReadingSession>, ApiResponse<ReadingSession>>('/reading-sessions', { topic_id: topicId }),
+  heartbeat: (id: string, progress: number, replyFocused: boolean) =>
+    api.patch<ApiResponse<ReadingSession>, ApiResponse<ReadingSession>>(`/reading-sessions/${id}/heartbeat`, { progress, reply_focused: replyFocused }),
+  completeReading: (id: string) => api.post<ApiResponse<ReadingSession>, ApiResponse<ReadingSession>>(`/reading-sessions/${id}/complete`),
 };
 
 export const bookmarkApi = {

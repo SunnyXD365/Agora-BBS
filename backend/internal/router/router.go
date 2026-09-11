@@ -9,12 +9,13 @@ import (
 )
 
 type Handlers struct {
-	UserHandler     *handler.UserHandler
-	CategoryHandler *handler.CategoryHandler
-	TopicHandler    *handler.TopicHandler
-	PostHandler     *handler.PostHandler
-	LikeHandler     *handler.LikeHandler
-	BookmarkHandler *handler.BookmarkHandler
+	UserHandler       *handler.UserHandler
+	CategoryHandler   *handler.CategoryHandler
+	TopicHandler      *handler.TopicHandler
+	PostHandler       *handler.PostHandler
+	LikeHandler       *handler.LikeHandler
+	BookmarkHandler   *handler.BookmarkHandler
+	GovernanceHandler *handler.GovernanceHandler
 }
 
 func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
@@ -22,6 +23,7 @@ func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
 	r.Use(middleware.RequestID())
 
 	v1 := r.Group("/api/v1")
+	v1.Use(middleware.OptionalJWT(cfg.JWTSecret))
 	{
 		// 健康检查
 		v1.GET("/ping", func(c *gin.Context) {
@@ -36,6 +38,7 @@ func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
 		}
 
 		v1.GET("/categories", h.CategoryHandler.ListCategories)
+		v1.GET("/governance/policy", h.GovernanceHandler.Policy)
 
 		topics := v1.Group("/topics")
 		{
@@ -49,9 +52,17 @@ func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
 		protected.Use(middleware.JWTAuth(cfg.JWTSecret))
 		{
 			protected.GET("/users/me", h.UserHandler.GetProfile)
+			protected.PUT("/users/me/onboarding", h.GovernanceHandler.SaveOnboarding)
+			protected.POST("/reading-sessions", h.GovernanceHandler.StartReading)
+			protected.PATCH("/reading-sessions/:id/heartbeat", h.GovernanceHandler.Heartbeat)
+			protected.POST("/reading-sessions/:id/complete", h.GovernanceHandler.Complete)
 
 			protected.POST("/topics", h.TopicHandler.CreateTopic)
+			protected.PATCH("/topics/:id", h.TopicHandler.UpdateCooling)
+			protected.DELETE("/topics/:id", h.TopicHandler.RecallCooling)
 			protected.POST("/topics/:id/posts", h.PostHandler.CreatePost)
+			protected.PATCH("/posts/:id", h.PostHandler.UpdateCooling)
+			protected.DELETE("/posts/:id", h.PostHandler.RecallCooling)
 			protected.GET("/bookmarks", h.BookmarkHandler.List)
 			protected.PUT("/bookmarks/:topicId", h.BookmarkHandler.Create)
 			protected.DELETE("/bookmarks/:topicId", h.BookmarkHandler.Delete)

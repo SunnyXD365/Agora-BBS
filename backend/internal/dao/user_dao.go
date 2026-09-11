@@ -27,10 +27,20 @@ func (d *UserDAO) CreateUser(ctx context.Context, u *model.User) error {
 }
 
 func (d *UserDAO) GetUserByID(ctx context.Context, id int64) (*model.User, error) {
-	query := `SELECT id, username, password_hash, email, avatar, role, status, created_at, updated_at FROM users WHERE id = $1`
+	query := `
+		SELECT u.id, u.username, u.password_hash, u.email, u.avatar, u.role, u.status,
+		       tp.trust_score, tp.unlock_level, tp.verified_read_seconds,
+		       p.onboarding_statement, p.background_tag, p.onboarding_status,
+		       u.created_at, u.updated_at
+		FROM users u
+		JOIN user_trust_profiles tp ON tp.user_id = u.id
+		JOIN user_profiles p ON p.user_id = u.id
+		WHERE u.id = $1`
 	u := &model.User{}
 	err := d.db.QueryRowContext(ctx, query, id).
-		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Email, &u.Avatar, &u.Role, &u.Status, &u.CreatedAt, &u.UpdatedAt)
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Email, &u.Avatar, &u.Role, &u.Status,
+			&u.TrustScore, &u.UnlockLevel, &u.VerifiedReadSeconds, &u.OnboardingStatement,
+			&u.BackgroundTag, &u.OnboardingStatus, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -38,10 +48,20 @@ func (d *UserDAO) GetUserByID(ctx context.Context, id int64) (*model.User, error
 }
 
 func (d *UserDAO) GetUserByUsername(ctx context.Context, username string) (*model.User, error) {
-	query := `SELECT id, username, password_hash, email, avatar, role, status, created_at, updated_at FROM users WHERE username = $1`
+	query := `
+		SELECT u.id, u.username, u.password_hash, u.email, u.avatar, u.role, u.status,
+		       tp.trust_score, tp.unlock_level, tp.verified_read_seconds,
+		       p.onboarding_statement, p.background_tag, p.onboarding_status,
+		       u.created_at, u.updated_at
+		FROM users u
+		JOIN user_trust_profiles tp ON tp.user_id = u.id
+		JOIN user_profiles p ON p.user_id = u.id
+		WHERE u.username = $1`
 	u := &model.User{}
 	err := d.db.QueryRowContext(ctx, query, username).
-		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Email, &u.Avatar, &u.Role, &u.Status, &u.CreatedAt, &u.UpdatedAt)
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Email, &u.Avatar, &u.Role, &u.Status,
+			&u.TrustScore, &u.UnlockLevel, &u.VerifiedReadSeconds, &u.OnboardingStatement,
+			&u.BackgroundTag, &u.OnboardingStatus, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

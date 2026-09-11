@@ -27,6 +27,8 @@ export default function Navbar() {
             <div className="h-8 w-24 animate-pulse rounded bg-gray-200" />
           ) : user ? (
             <div className="flex items-center gap-4">
+              <Link href="/bookmarks" className="text-sm text-gray-600 hover:text-gray-900">收藏</Link>
+              <Link href="/profile" className="text-sm text-gray-600 hover:text-gray-900">成长中心</Link>
               <span className="text-sm text-gray-600">
                 你好，<strong className="text-gray-900">{user.username}</strong>
               </span>

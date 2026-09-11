@@ -34,3 +34,8 @@ type PostListReq struct {
 	Page     int   `form:"page,default=1"`
 	PageSize int   `form:"page_size,default=20"`
 }
+
+type UpdatePostReq struct {
+	Content  string `json:"content" binding:"required,min=1"`
+	PostType string `json:"post_type" binding:"required,oneof=debate evidence experience thanks"`
+}

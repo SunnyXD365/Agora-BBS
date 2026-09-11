@@ -9,6 +9,8 @@ import (
 	"agora-backend/internal/handler"
 	"agora-backend/internal/router"
 	"agora-backend/internal/service"
+	agoraworkflow "agora-backend/internal/workflow"
+	"go.temporal.io/sdk/client"
 )
 
 func main() {
@@ -27,6 +29,12 @@ func main() {
 	if err := db.RunMigrations(cfg.DBDSN); err != nil {
 		log.Fatalf("[Error] Database migration failed: %v", err)
 	}
+	temporalClient, err := client.Dial(client.Options{HostPort: cfg.TemporalHost})
+	if err != nil {
+		log.Fatalf("[Error] Failed to connect to Temporal: %v", err)
+	}
+	defer temporalClient.Close()
+	coolingStarter := agoraworkflow.NewTemporalStarter(temporalClient, cfg.TemporalTaskQueue)
 
 	// 3. DAO 层初始化
 	userDAO := dao.NewUserDAO(database)
@@ -35,12 +43,14 @@ func main() {
 	postDAO := dao.NewPostDAO(database)
 	likeDAO := dao.NewLikeDAO(database)
 	bookmarkDAO := dao.NewBookmarkDAO(database)
+	governanceDAO := dao.NewGovernanceDAO(database)
 
 	// 4. Service 层初始化 (注入对应的 DAO 与配置项)
 	userService := service.NewUserService(userDAO, cfg.JWTSecret, cfg.JWTExpireHours)
 	categoryService := service.NewCategoryService(categoryDAO)
-	topicService := service.NewTopicService(topicDAO)
-	postService := service.NewPostService(postDAO)
+	governanceService := service.NewGovernanceService(governanceDAO, userDAO, cfg)
+	topicService := service.NewTopicService(topicDAO, governanceService, coolingStarter)
+	postService := service.NewPostService(postDAO, governanceService, coolingStarter)
 	likeService := service.NewLikeService(likeDAO)
 	bookmarkService := service.NewBookmarkService(bookmarkDAO)
 
@@ -51,15 +61,17 @@ func main() {
 	postHandler := handler.NewPostHandler(postService)
 	likeHandler := handler.NewLikeHandler(likeService)
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkService)
+	governanceHandler := handler.NewGovernanceHandler(governanceService)
 
 	// 6. 组装 Handlers 并传递给 SetupRouter
 	handlers := &router.Handlers{
-		UserHandler:     userHandler,
-		CategoryHandler: categoryHandler,
-		TopicHandler:    topicHandler,
-		PostHandler:     postHandler,
-		LikeHandler:     likeHandler,
-		BookmarkHandler: bookmarkHandler,
+		UserHandler:       userHandler,
+		CategoryHandler:   categoryHandler,
+		TopicHandler:      topicHandler,
+		PostHandler:       postHandler,
+		LikeHandler:       likeHandler,
+		BookmarkHandler:   bookmarkHandler,
+		GovernanceHandler: governanceHandler,
 	}
 
 	r := router.SetupRouter(cfg, handlers)

@@ -39,8 +39,16 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	userID := c.GetInt64("userID")
 
 	// 这里对齐 Service 的 (ctx, userID, &req) 签名
-	postID, err := h.postService.CreatePost(c.Request.Context(), userID, &req)
+	post, err := h.postService.CreatePost(c.Request.Context(), userID, &req)
 	if err != nil {
+		if errors.Is(err, service.ErrReplyLocked) {
+			response.Error(c, http.StatusForbidden, 40302, err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrReadingRequired) {
+			response.Error(c, http.StatusConflict, 40902, err.Error())
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			response.Error(c, http.StatusNotFound, 40401, "topic not found")
 			return
@@ -53,7 +61,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, gin.H{"post_id": postID})
+	response.Success(c, gin.H{"post_id": post.ID, "status": post.Status, "cooling_ends_at": post.CoolingEndsAt})
 }
 
 func (h *PostHandler) ListPosts(c *gin.Context) {
@@ -66,11 +74,43 @@ func (h *PostHandler) ListPosts(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	pageData, err := h.postService.ListPosts(c.Request.Context(), topicID, page, pageSize)
+	pageData, err := h.postService.ListPosts(c.Request.Context(), topicID, c.GetInt64("userID"), page, pageSize)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, 50001, "failed to fetch posts")
 		return
 	}
 
 	response.Success(c, pageData)
+}
+
+func (h *PostHandler) UpdateCooling(c *gin.Context) {
+	postID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, 40001, "invalid post id")
+		return
+	}
+	var req model.UpdatePostReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, 40002, "invalid request body")
+		return
+	}
+	post, err := h.postService.UpdateCooling(c.Request.Context(), c.GetInt64("userID"), postID, &req)
+	if err != nil {
+		response.Error(c, http.StatusConflict, 40901, "post is not editable")
+		return
+	}
+	response.Success(c, post)
+}
+
+func (h *PostHandler) RecallCooling(c *gin.Context) {
+	postID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, 40001, "invalid post id")
+		return
+	}
+	if err := h.postService.RecallCooling(c.Request.Context(), c.GetInt64("userID"), postID); err != nil {
+		response.Error(c, http.StatusConflict, 40901, "post is not recallable")
+		return
+	}
+	response.Success(c, gin.H{"status": "recalled"})
 }
