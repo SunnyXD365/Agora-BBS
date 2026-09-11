@@ -175,3 +175,27 @@ export interface ReviewSubmission {
   llm_check_status: string;
   completed_at: string;
 }
+
+export interface AdminDailyTrend { date: string; users: number; topics: number; posts: number; feedback: number; }
+export interface AdminOverview {
+  users_total: number;
+  topics_total: number;
+  posts_total: number;
+  active_users_7_days: number;
+  content_status: Record<string, number>;
+  trust_distribution: Record<string, number>;
+  review_total: number;
+  review_completed: number;
+  review_expired: number;
+  review_fair: number;
+  llm_calls: number;
+  llm_success: number;
+  llm_average_ms: number;
+  llm_prompt_tokens: number;
+  llm_output_tokens: number;
+  trend: AdminDailyTrend[];
+}
+export interface AdminUser { id: number; username: string; email: string; role: string; status: string; unlock_level: number; trust_score: number; verified_read_seconds: number; onboarding_status: string; created_at: string; }
+export interface AdminContent { id: number; type: 'topic' | 'post'; title: string; excerpt: string; author_name: string; status: string; created_at: string; }
+export interface AdminLLMJob { id: number; job_type: string; aggregate_type: string; aggregate_id: number; status: string; attempts: number; model: string; error_message: string; prompt_tokens: number; completion_tokens: number; latency_ms: number; created_at: string; }
+export interface AdminTrustLog { id: number; user_id: number; username: string; event_type: string; score_delta: number; reason: string; reference_type: string; reference_id?: number; created_at: string; }

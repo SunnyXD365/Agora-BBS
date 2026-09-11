@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"log"
+	"time"
 
+	"agora-backend/internal/cache"
 	"agora-backend/internal/config"
 	"agora-backend/internal/dao"
 	"agora-backend/internal/db"
@@ -25,6 +28,15 @@ func main() {
 	}
 	defer database.Close()
 	log.Println("[Init] PostgreSQL connected successfully.")
+	redisStore := cache.NewRedis(cfg.RedisAddr)
+	defer redisStore.Close()
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	if err := redisStore.Ping(pingCtx); err != nil {
+		log.Printf("[Warn] Redis unavailable; requests will fall back to PostgreSQL: %v", err)
+	} else {
+		log.Println("[Init] Redis connected successfully.")
+	}
+	pingCancel()
 
 	if err := db.RunMigrations(cfg.DBDSN); err != nil {
 		log.Fatalf("[Error] Database migration failed: %v", err)
@@ -46,17 +58,19 @@ func main() {
 	governanceDAO := dao.NewGovernanceDAO(database)
 	feedbackDAO := dao.NewFeedbackDAO(database)
 	reviewDAO := dao.NewReviewDAO(database)
+	adminDAO := dao.NewAdminDAO(database)
 
 	// 4. Service 层初始化 (注入对应的 DAO 与配置项)
 	userService := service.NewUserService(userDAO, cfg.JWTSecret, cfg.JWTExpireHours)
-	categoryService := service.NewCategoryService(categoryDAO)
+	categoryService := service.NewCategoryService(categoryDAO, redisStore)
 	governanceService := service.NewGovernanceService(governanceDAO, userDAO, cfg, coolingStarter)
-	topicService := service.NewTopicService(topicDAO, governanceService, coolingStarter)
+	topicService := service.NewTopicService(topicDAO, governanceService, coolingStarter, redisStore)
 	postService := service.NewPostService(postDAO, governanceService, coolingStarter)
 	likeService := service.NewLikeService(likeDAO)
 	bookmarkService := service.NewBookmarkService(bookmarkDAO)
 	feedbackService := service.NewFeedbackService(feedbackDAO, governanceService, coolingStarter)
 	reviewService := service.NewReviewService(reviewDAO, governanceService, coolingStarter)
+	adminService := service.NewAdminService(adminDAO, redisStore, coolingStarter, coolingStarter)
 
 	// 5. Handler 层初始化 (注入对应的 Service)
 	userHandler := handler.NewUserHandler(userService)
@@ -68,6 +82,7 @@ func main() {
 	governanceHandler := handler.NewGovernanceHandler(governanceService)
 	feedbackHandler := handler.NewFeedbackHandler(feedbackService)
 	reviewHandler := handler.NewReviewHandler(reviewService)
+	adminHandler := handler.NewAdminHandler(adminService)
 
 	// 6. 组装 Handlers 并传递给 SetupRouter
 	handlers := &router.Handlers{
@@ -80,9 +95,10 @@ func main() {
 		GovernanceHandler: governanceHandler,
 		FeedbackHandler:   feedbackHandler,
 		ReviewHandler:     reviewHandler,
+		AdminHandler:      adminHandler,
 	}
 
-	r := router.SetupRouter(cfg, handlers)
+	r := router.SetupRouter(cfg, redisStore, database, handlers)
 
 	// 7. 启动 HTTP 服务
 	serverAddr := ":" + cfg.Port

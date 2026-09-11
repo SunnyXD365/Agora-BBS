@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 	"unicode/utf8"
 
+	"agora-backend/internal/cache"
 	"agora-backend/internal/dao"
 	"agora-backend/internal/model"
 	"agora-backend/internal/workflow"
@@ -16,10 +18,11 @@ type TopicService struct {
 	topicDAO   *dao.TopicDAO
 	governance *GovernanceService
 	cooling    workflow.CoolingStarter
+	cache      *cache.Store
 }
 
-func NewTopicService(topicDAO *dao.TopicDAO, governance *GovernanceService, cooling workflow.CoolingStarter) *TopicService {
-	return &TopicService{topicDAO: topicDAO, governance: governance, cooling: cooling}
+func NewTopicService(topicDAO *dao.TopicDAO, governance *GovernanceService, cooling workflow.CoolingStarter, store *cache.Store) *TopicService {
+	return &TopicService{topicDAO: topicDAO, governance: governance, cooling: cooling, cache: store}
 }
 
 func (s *TopicService) CreateTopic(ctx context.Context, userID int64, req *model.CreateTopicReq) (*model.Topic, error) {
@@ -59,6 +62,7 @@ func (s *TopicService) CreateTopic(ctx context.Context, userID int64, req *model
 	if err := s.topicDAO.CreateTopic(ctx, topic); err != nil {
 		return nil, err
 	}
+	_ = s.cache.DeletePrefix(ctx, "topics:list:")
 	requiresReview := categoryRequiresReview || utf8.RuneCountInString(structured.Claim+structured.Evidence+structured.Uncertainty) >= policy.LongTopicChars
 	if err := s.cooling.StartCooling(ctx, workflow.CoolingInput{Kind: "topic", ID: topic.ID, EndsAt: endsAt, RequiresReview: requiresReview}); err != nil {
 		return nil, err
@@ -70,12 +74,19 @@ func (s *TopicService) GetTopicDetail(ctx context.Context, topicID, viewerID int
 	if err := s.topicDAO.IncrementViewCount(ctx, topicID); err != nil {
 		return nil, err
 	}
-	topic, err := s.topicDAO.GetTopicByID(ctx, topicID, viewerID)
+	key := fmt.Sprintf("topics:detail:%d:%d", topicID, viewerID)
+	var topic model.Topic
+	if err := s.cache.GetJSON(ctx, key, &topic); err == nil {
+		return &topic, nil
+	}
+	loaded, err := s.topicDAO.GetTopicByID(ctx, topicID, viewerID)
 	if err != nil {
 		return nil, err
 	}
-
-	return topic, nil
+	if loaded != nil {
+		_ = s.cache.SetJSON(ctx, key, loaded, 30*time.Second)
+	}
+	return loaded, nil
 }
 
 func (s *TopicService) UpdateCooling(ctx context.Context, userID, topicID int64, req *model.UpdateTopicReq) (*model.Topic, error) {
@@ -89,6 +100,7 @@ func (s *TopicService) UpdateCooling(ctx context.Context, userID, topicID int64,
 	if err := s.topicDAO.UpdateCooling(ctx, topic); err != nil {
 		return nil, err
 	}
+	_ = s.cache.DeletePrefix(ctx, fmt.Sprintf("topics:detail:%d:", topicID))
 	requiresReview := utf8.RuneCountInString(req.StructuredContent.Claim+req.StructuredContent.Evidence+req.StructuredContent.Uncertainty) >= policy.LongTopicChars
 	if err := s.cooling.StartCooling(ctx, workflow.CoolingInput{Kind: "topic", ID: topicID, EndsAt: endsAt, RequiresReview: requiresReview}); err != nil {
 		return nil, err
@@ -97,7 +109,12 @@ func (s *TopicService) UpdateCooling(ctx context.Context, userID, topicID int64,
 }
 
 func (s *TopicService) RecallCooling(ctx context.Context, userID, topicID int64) error {
-	return s.topicDAO.RecallCooling(ctx, topicID, userID)
+	err := s.topicDAO.RecallCooling(ctx, topicID, userID)
+	if err == nil {
+		_ = s.cache.DeletePrefix(ctx, fmt.Sprintf("topics:detail:%d:", topicID))
+		_ = s.cache.DeletePrefix(ctx, "topics:list:")
+	}
+	return err
 }
 
 func (s *TopicService) ListTopics(ctx context.Context, req *model.TopicListReq) (*model.Page[*model.Topic], error) {
@@ -109,9 +126,16 @@ func (s *TopicService) ListTopics(ctx context.Context, req *model.TopicListReq) 
 	}
 
 	// 保持参数位置正确：(ctx, categoryID, page, pageSize)
+	key := fmt.Sprintf("topics:list:%d:%d:%d", req.CategoryID, req.Page, req.PageSize)
+	var cached model.Page[*model.Topic]
+	if err := s.cache.GetJSON(ctx, key, &cached); err == nil {
+		return &cached, nil
+	}
 	topics, total, err := s.topicDAO.ListTopicsByCategoryID(ctx, req.CategoryID, req.Page, req.PageSize)
 	if err != nil {
 		return nil, err
 	}
-	return &model.Page[*model.Topic]{Items: topics, Total: total, Page: req.Page, PageSize: req.PageSize}, nil
+	result := &model.Page[*model.Topic]{Items: topics, Total: total, Page: req.Page, PageSize: req.PageSize}
+	_ = s.cache.SetJSON(ctx, key, result, 30*time.Second)
+	return result, nil
 }

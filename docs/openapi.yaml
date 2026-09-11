@@ -1,145 +1,166 @@
 openapi: 3.1.0
 info:
   title: Agora-BBS API
-  version: 0.2.0
-  description: Agora-BBS v1 公共 HTTP 契约。所有响应均带有 request_id。
+  version: 1.0.0
+  description: 低摩擦社区治理论坛 HTTP 契约。所有响应包含 request_id；code=0 表示成功。
 servers:
   - url: http://localhost:8080/api/v1
+security: []
+tags:
+  - { name: Auth }
+  - { name: Forum }
+  - { name: Governance }
+  - { name: Review }
+  - { name: Admin }
 paths:
   /ping:
-    get:
-      summary: 健康检查
-      responses:
-        '200': { description: 服务正常 }
+    get: { tags: [Forum], summary: 健康检查, responses: { '200': { description: OK } } }
   /auth/register:
     post:
-      summary: 注册并获取 JWT
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/RegisterRequest' }
-      responses:
-        '200': { $ref: '#/components/responses/AuthResponse' }
-        '400': { $ref: '#/components/responses/ErrorResponse' }
+      tags: [Auth]
+      summary: 注册
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
   /auth/login:
     post:
+      tags: [Auth]
       summary: 登录
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/LoginRequest' }
-      responses:
-        '200': { $ref: '#/components/responses/AuthResponse' }
-        '401': { $ref: '#/components/responses/ErrorResponse' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '401': { $ref: '#/components/responses/Error' } }
+  /users/me:
+    get: { tags: [Auth], summary: 当前用户资料与能力, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' }, '401': { $ref: '#/components/responses/Error' } } }
+  /users/me/onboarding:
+    put:
+      tags: [Review]
+      summary: 提交社区自述并触发三人盲审
+      security: [bearerAuth: []]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OnboardingRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' } }
   /categories:
-    get:
-      summary: 获取启用的板块
-      responses:
-        '200': { description: 板块列表 }
+    get: { tags: [Forum], summary: 启用分类列表, responses: { '200': { $ref: '#/components/responses/Success' } } }
   /topics:
     get:
-      summary: 分页获取已发布主题
-      parameters:
-        - { in: query, name: category_id, schema: { type: integer, format: int64 } }
-        - { in: query, name: page, schema: { type: integer, default: 1 } }
-        - { in: query, name: page_size, schema: { type: integer, default: 20, maximum: 50 } }
-      responses:
-        '200': { description: 主题分页 }
+      tags: [Forum]
+      summary: 已发布主题分页
+      parameters: [ { $ref: '#/components/parameters/CategoryID' }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ]
+      responses: { '200': { $ref: '#/components/responses/Success' } }
     post:
-      summary: 创建结构化主题
+      tags: [Forum]
+      summary: 创建结构化主题（L2）
       security: [bearerAuth: []]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/CreateTopicRequest' }
-      responses:
-        '200': { description: 创建成功 }
-        '401': { $ref: '#/components/responses/ErrorResponse' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateTopicRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '403': { $ref: '#/components/responses/Error' } }
   /topics/{id}:
-    get:
-      summary: 获取主题详情
-      parameters:
-        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
-      responses:
-        '200': { description: 主题详情 }
-        '404': { $ref: '#/components/responses/ErrorResponse' }
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    get: { tags: [Forum], summary: 主题详情, responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } } }
+    patch:
+      tags: [Forum]
+      summary: 冷静期编辑主题并重新计时
+      security: [bearerAuth: []]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateTopicRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } }
+    delete: { tags: [Forum], summary: 冷静期撤回主题, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } } }
   /topics/{id}/posts:
-    get:
-      summary: 分页获取主题回复
-      parameters:
-        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
-      responses:
-        '200': { description: 回复分页，parent_id 用于构建回复树 }
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    get: { tags: [Forum], summary: 分层回复分页, parameters: [ { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
     post:
-      summary: 创建分层回复
+      tags: [Forum]
+      summary: 创建类型化回复（L1）
       security: [bearerAuth: []]
-      parameters:
-        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
-      responses:
-        '200': { description: 创建成功 }
-  /users/me:
-    get:
-      summary: 获取当前用户
-      security: [bearerAuth: []]
-      responses:
-        '200': { description: 当前用户 }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreatePostRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '403': { $ref: '#/components/responses/Error' } }
+  /posts/{id}:
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    patch: { tags: [Forum], summary: 冷静期编辑回复, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } } }
+    delete: { tags: [Forum], summary: 冷静期撤回回复, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } } }
   /bookmarks:
-    get:
-      summary: 获取当前用户收藏
-      security: [bearerAuth: []]
-      responses:
-        '200': { description: 收藏分页 }
+    get: { tags: [Forum], summary: 收藏分页, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
   /bookmarks/{topicId}:
-    put:
-      summary: 收藏主题
+    parameters: [ { in: path, name: topicId, required: true, schema: { type: integer, format: int64 } } ]
+    put: { tags: [Forum], summary: 收藏, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    delete: { tags: [Forum], summary: 取消收藏, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /governance/policy:
+    get: { tags: [Governance], summary: 公开治理计时参数, responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /reading-sessions:
+    post:
+      tags: [Governance]
+      summary: 开始阅读会话
       security: [bearerAuth: []]
-      parameters:
-        - { in: path, name: topicId, required: true, schema: { type: integer, format: int64 } }
-      responses:
-        '200': { description: 收藏成功 }
-    delete:
-      summary: 取消收藏
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [topic_id], properties: { topic_id: { type: integer, format: int64 } } } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /reading-sessions/{id}/heartbeat:
+    patch:
+      tags: [Governance]
+      summary: 阅读心跳
       security: [bearerAuth: []]
-      parameters:
-        - { in: path, name: topicId, required: true, schema: { type: integer, format: int64 } }
-      responses:
-        '200': { description: 取消成功 }
+      parameters: [ { in: path, name: id, required: true, schema: { type: string } } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [progress], properties: { progress: { type: integer, minimum: 0, maximum: 100 }, reply_focused: { type: boolean } } } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /reading-sessions/{id}/complete:
+    post: { tags: [Governance], summary: 完成阅读会话, security: [bearerAuth: []], parameters: [ { in: path, name: id, required: true, schema: { type: string } } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /feedbacks/summary:
+    get: { tags: [Governance], summary: 反馈汇总, parameters: [ { in: query, name: target_type, required: true, schema: { type: string, enum: [topic, post] } }, { in: query, name: target_id, required: true, schema: { type: integer, format: int64 } } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /feedbacks:
+    post:
+      tags: [Governance]
+      summary: 创建或修改语境反馈（L1）
+      security: [bearerAuth: []]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/FeedbackRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } }
+  /feedbacks/{id}:
+    delete: { tags: [Governance], summary: 撤回反馈, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/ID' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /topics/{id}/clusters:
+    get: { tags: [Governance], summary: 评论聚类标签, parameters: [ { $ref: '#/components/parameters/ID' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /reviews/tasks:
+    get: { tags: [Review], summary: 当前用户匿名评审任务（L3）, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' }, '403': { $ref: '#/components/responses/Error' } } }
+  /reviews/tasks/{id}:
+    post:
+      tags: [Review]
+      summary: 提交盲审
+      security: [bearerAuth: []]
+      parameters: [ { $ref: '#/components/parameters/ID' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } }
+  /admin/overview:
+    get: { tags: [Admin], summary: 统计总览, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' }, '403': { $ref: '#/components/responses/Error' } } }
+  /admin/users:
+    get: { tags: [Admin], summary: 用户与隐藏信任分, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /admin/users/{id}/status:
+    patch: { tags: [Admin], summary: 停用或恢复用户, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/ID' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /admin/trust-logs:
+    get: { tags: [Admin], summary: 信任流水, security: [bearerAuth: []], parameters: [ { in: query, name: user_id, schema: { type: integer, format: int64 } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /admin/contents:
+    get: { tags: [Admin], summary: 内容治理列表, security: [bearerAuth: []], parameters: [ { in: query, name: type, required: true, schema: { type: string, enum: [topic, post] } }, { in: query, name: status, schema: { type: string } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /admin/contents/{type}/{id}/visibility:
+    patch: { tags: [Admin], summary: 隐藏或恢复内容, security: [bearerAuth: []], parameters: [ { in: path, name: type, required: true, schema: { type: string, enum: [topic, post] } }, { $ref: '#/components/parameters/ID' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /admin/llm-jobs:
+    get: { tags: [Admin], summary: LLM 作业和用量, security: [bearerAuth: []], parameters: [ { in: query, name: status, schema: { type: string } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /admin/llm-jobs/{id}/retry:
+    post: { tags: [Admin], summary: 安全重试失败作业, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/ID' } ], responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } } }
+  /admin/categories:
+    get: { tags: [Admin], summary: 包含停用项的分类列表, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post: { tags: [Admin], summary: 新增分类, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /admin/categories/{id}:
+    patch: { tags: [Admin], summary: 编辑、排序、停用分类, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/ID' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    ID: { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+    CategoryID: { in: query, name: category_id, schema: { type: integer, format: int64 } }
+    Page: { in: query, name: page, schema: { type: integer, default: 1, minimum: 1 } }
+    PageSize: { in: query, name: page_size, schema: { type: integer, default: 20, minimum: 1, maximum: 100 } }
   schemas:
-    RegisterRequest:
-      type: object
-      required: [username, password]
-      properties:
-        username: { type: string, minLength: 3, maxLength: 32 }
-        password: { type: string, minLength: 6, maxLength: 32 }
-        email: { type: string, format: email }
-    LoginRequest:
-      type: object
-      required: [username, password]
-      properties:
-        username: { type: string }
-        password: { type: string }
-    StructuredContent:
-      type: object
-      required: [claim]
-      properties:
-        claim: { type: string, minLength: 5 }
-        evidence: { type: string }
-        uncertainty: { type: string }
-    CreateTopicRequest:
-      type: object
-      required: [category_id, title, structured_content]
-      properties:
-        category_id: { type: integer, format: int64 }
-        title: { type: string, minLength: 3, maxLength: 128 }
-        structured_content: { $ref: '#/components/schemas/StructuredContent' }
+    Envelope: { type: object, required: [code, msg, data, request_id], properties: { code: { type: integer }, msg: { type: string }, data: {}, request_id: { type: string } } }
+    RegisterRequest: { type: object, required: [username, password], properties: { username: { type: string, minLength: 3, maxLength: 32 }, password: { type: string, minLength: 6, maxLength: 32 }, email: { type: string, format: email } } }
+    LoginRequest: { type: object, required: [username, password], properties: { username: { type: string }, password: { type: string } } }
+    OnboardingRequest: { type: object, required: [statement, background_tag], properties: { statement: { type: string, minLength: 20, maxLength: 1000 }, background_tag: { type: string, minLength: 2, maxLength: 64 } } }
+    StructuredContent: { type: object, required: [claim], properties: { claim: { type: string, minLength: 5 }, evidence: { type: string }, uncertainty: { type: string } } }
+    CreateTopicRequest: { type: object, required: [category_id, title, structured_content], properties: { category_id: { type: integer, format: int64 }, title: { type: string, minLength: 3, maxLength: 128 }, structured_content: { $ref: '#/components/schemas/StructuredContent' } } }
+    UpdateTopicRequest: { type: object, required: [title, structured_content], properties: { title: { type: string }, structured_content: { $ref: '#/components/schemas/StructuredContent' } } }
+    CreatePostRequest: { type: object, required: [content, post_type], properties: { content: { type: string, minLength: 1 }, parent_id: { type: integer, format: int64 }, post_type: { type: string, enum: [debate, evidence, experience, thanks] } } }
+    FeedbackRequest: { type: object, required: [target_type, target_id, stance, tag, reason], properties: { target_type: { type: string, enum: [topic, post] }, target_id: { type: integer, format: int64 }, stance: { type: string, enum: [support, challenge] }, tag: { type: string, enum: [logical, new_perspective, well_sourced, empathetic, factual_concern, reasoning_gap, inappropriate] }, reason: { type: string, minLength: 5, maxLength: 120 } } }
+    ReviewRequest: { type: object, required: [appropriateness, sincerity, reason], properties: { appropriateness: { type: boolean }, sincerity: { type: boolean }, reason: { type: string, minLength: 10, maxLength: 500 } } }
   responses:
-    AuthResponse:
-      description: 认证成功
-    ErrorResponse:
-      description: 统一错误响应
+    Success: { description: 统一成功响应, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
+    Error: { description: 统一错误响应, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }

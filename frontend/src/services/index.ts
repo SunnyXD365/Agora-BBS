@@ -1,6 +1,11 @@
 import api from '@/lib/api';
 import {
   ApiResponse,
+  AdminContent,
+  AdminLLMJob,
+  AdminOverview,
+  AdminTrustLog,
+  AdminUser,
   AuthData,
   Bookmark,
   Category,
@@ -106,4 +111,18 @@ export const reviewApi = {
   list: () => api.get<ApiResponse<ReviewTask[]>, ApiResponse<ReviewTask[]>>('/reviews/tasks'),
   submit: (id: number, data: { appropriateness: boolean; sincerity: boolean; reason: string }) =>
     api.post<ApiResponse<ReviewSubmission>, ApiResponse<ReviewSubmission>>(`/reviews/tasks/${id}`, data),
+};
+
+export const adminApi = {
+  overview: () => api.get<ApiResponse<AdminOverview>, ApiResponse<AdminOverview>>('/admin/overview'),
+  users: () => api.get<ApiResponse<PageData<AdminUser>>, ApiResponse<PageData<AdminUser>>>('/admin/users', { params: { page_size: 100 } }),
+  setUserStatus: (id: number, status: 'active' | 'suspended') => api.patch<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/admin/users/${id}/status`, { status }),
+  contents: (type: 'topic' | 'post') => api.get<ApiResponse<PageData<AdminContent>>, ApiResponse<PageData<AdminContent>>>('/admin/contents', { params: { type, page_size: 100 } }),
+  setContentVisibility: (type: 'topic' | 'post', id: number, hidden: boolean) => api.patch<ApiResponse<{ hidden: boolean }>, ApiResponse<{ hidden: boolean }>>(`/admin/contents/${type}/${id}/visibility`, { hidden }),
+  llmJobs: () => api.get<ApiResponse<PageData<AdminLLMJob>>, ApiResponse<PageData<AdminLLMJob>>>('/admin/llm-jobs', { params: { page_size: 100 } }),
+  retryLLMJob: (id: number) => api.post<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/admin/llm-jobs/${id}/retry`),
+  trustLogs: () => api.get<ApiResponse<PageData<AdminTrustLog>>, ApiResponse<PageData<AdminTrustLog>>>('/admin/trust-logs', { params: { page_size: 100 } }),
+  categories: () => api.get<ApiResponse<Category[]>, ApiResponse<Category[]>>('/admin/categories'),
+  createCategory: (data: Omit<Category, 'id'>) => api.post<ApiResponse<Category>, ApiResponse<Category>>('/admin/categories', data),
+  updateCategory: (id: number, data: Omit<Category, 'id'>) => api.patch<ApiResponse<Category>, ApiResponse<Category>>(`/admin/categories/${id}`, data),
 };

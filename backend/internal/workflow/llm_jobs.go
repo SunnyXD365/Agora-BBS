@@ -15,6 +15,7 @@ import (
 
 type LLMStarter interface {
 	StartFeedbackAudit(context.Context, int64) error
+	StartClusterTopic(context.Context, int64) error
 }
 
 func (s *TemporalStarter) StartFeedbackAudit(ctx context.Context, feedbackID int64) error {
@@ -22,6 +23,21 @@ func (s *TemporalStarter) StartFeedbackAudit(ctx context.Context, feedbackID int
 		ID: fmt.Sprintf("feedback-audit-%d-%d", feedbackID, time.Now().UnixNano()), TaskQueue: s.taskQueue,
 	}, FeedbackAuditWorkflow, feedbackID)
 	return err
+}
+
+func (s *TemporalStarter) StartClusterTopic(ctx context.Context, topicID int64) error {
+	_, err := s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID: fmt.Sprintf("comment-cluster-%d-%d", topicID, time.Now().UnixNano()), TaskQueue: s.taskQueue,
+	}, ClusterTopicWorkflow, topicID)
+	return err
+}
+
+func ClusterTopicWorkflow(ctx temporalworkflow.Context, topicID int64) error {
+	ctx = temporalworkflow.WithActivityOptions(ctx, temporalworkflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         &temporal.RetryPolicy{InitialInterval: 2 * time.Second, BackoffCoefficient: 2, MaximumInterval: time.Minute, MaximumAttempts: 5},
+	})
+	return temporalworkflow.ExecuteActivity(ctx, "ClusterTopic", topicID).Get(ctx, nil)
 }
 
 func FeedbackAuditWorkflow(ctx temporalworkflow.Context, feedbackID int64) error {
@@ -139,10 +155,13 @@ func (a *Activities) ClusterTopic(ctx context.Context, topicID int64) error {
 	}
 	var result clusterResponse
 	if err := json.Unmarshal(raw, &result); err != nil {
+		a.recordLLMFailure(ctx, jobKey, err)
 		return err
 	}
 	if len(result.Clusters) < 3 || len(result.Clusters) > 8 {
-		return errors.New("LLM cluster count must be between 3 and 8")
+		err = errors.New("LLM cluster count must be between 3 and 8")
+		a.recordLLMFailure(ctx, jobKey, err)
+		return err
 	}
 	valid := map[int64]bool{}
 	for _, p := range posts {
@@ -159,7 +178,9 @@ func (a *Activities) ClusterTopic(ctx context.Context, topicID int64) error {
 	for _, cluster := range result.Clusters {
 		cluster.Tag = strings.TrimSpace(cluster.Tag)
 		if cluster.Tag == "" {
-			return errors.New("empty cluster tag")
+			err = errors.New("empty cluster tag")
+			a.recordLLMFailure(ctx, jobKey, err)
+			return err
 		}
 		var clusterID int64
 		err = tx.QueryRowContext(ctx, `INSERT INTO comment_clusters(topic_id,tag,summary,weight,model,generation) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`, topicID, cluster.Tag, cluster.Summary, cluster.Weight, a.LLM.Model(), generation).Scan(&clusterID)

@@ -19,6 +19,7 @@ type BlindReviewInput struct {
 type BlindReviewStarter interface {
 	StartBlindReview(context.Context, string, int64) error
 	StartReviewAudit(context.Context, int64) error
+	StartFinalizeReview(context.Context, int64) error
 }
 
 func (s *TemporalStarter) StartBlindReview(ctx context.Context, subjectType string, subjectID int64) error {
@@ -26,7 +27,11 @@ func (s *TemporalStarter) StartBlindReview(ctx context.Context, subjectType stri
 	return err
 }
 func (s *TemporalStarter) StartReviewAudit(ctx context.Context, taskID int64) error {
-	_, err := s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: fmt.Sprintf("review-audit-%d", taskID), TaskQueue: s.taskQueue}, ReviewAuditWorkflow, taskID)
+	_, err := s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: fmt.Sprintf("review-audit-%d-%d", taskID, time.Now().UnixNano()), TaskQueue: s.taskQueue}, ReviewAuditWorkflow, taskID)
+	return err
+}
+func (s *TemporalStarter) StartFinalizeReview(ctx context.Context, batchID int64) error {
+	_, err := s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: fmt.Sprintf("review-fallback-%d-%d", batchID, time.Now().UnixNano()), TaskQueue: s.taskQueue}, FinalizeBlindReviewWorkflow, batchID)
 	return err
 }
 
@@ -45,6 +50,11 @@ func BlindReviewWorkflow(ctx temporalworkflow.Context, input BlindReviewInput) e
 func ReviewAuditWorkflow(ctx temporalworkflow.Context, taskID int64) error {
 	ctx = temporalworkflow.WithActivityOptions(ctx, temporalworkflow.ActivityOptions{StartToCloseTimeout: time.Minute, RetryPolicy: &temporal.RetryPolicy{InitialInterval: 2 * time.Second, BackoffCoefficient: 2, MaximumAttempts: 5}})
 	return temporalworkflow.ExecuteActivity(ctx, "AuditReview", taskID).Get(ctx, nil)
+}
+
+func FinalizeBlindReviewWorkflow(ctx temporalworkflow.Context, batchID int64) error {
+	ctx = temporalworkflow.WithActivityOptions(ctx, temporalworkflow.ActivityOptions{StartToCloseTimeout: time.Minute, RetryPolicy: &temporal.RetryPolicy{InitialInterval: 2 * time.Second, BackoffCoefficient: 2, MaximumInterval: time.Minute, MaximumAttempts: 5}})
+	return temporalworkflow.ExecuteActivity(ctx, "FinalizeBlindReview", batchID).Get(ctx, nil)
 }
 
 func (a *Activities) CreateBlindReviewBatch(ctx context.Context, input BlindReviewInput) (int64, error) {
@@ -70,6 +80,7 @@ func (a *Activities) AuditReview(ctx context.Context, taskID int64) error {
 	}
 	var verdict reviewAuditResult
 	if err = json.Unmarshal(raw, &verdict); err != nil {
+		a.recordLLMFailure(ctx, jobKey, err)
 		return err
 	}
 	delta, status := 3, "valid"
@@ -129,12 +140,16 @@ func (a *Activities) FinalizeBlindReview(ctx context.Context, batchID int64) err
 	if err != nil {
 		return err
 	}
-	raw, _, err := a.LLM.CompleteJSON(ctx, `你是盲审超时兜底审核器。只返回 JSON：{"pass":boolean,"reason":string}。仅判断语言是否得体、态度是否真诚。`, fmt.Sprintf("内容: %s\n已完成的人类评审: %s", subject, reviews))
+	jobKey := fmt.Sprintf("review-fallback:%d", batchID)
+	_, _ = a.DB.ExecContext(ctx, `INSERT INTO llm_jobs(job_key,job_type,aggregate_type,aggregate_id,status,model) VALUES($1,'review_fallback','review_batch',$2,'running',$3) ON CONFLICT(job_key) DO UPDATE SET status='running',attempts=llm_jobs.attempts+1,error_message=''`, jobKey, batchID, a.LLM.Model())
+	raw, usage, err := a.LLM.CompleteJSON(ctx, `你是盲审超时兜底审核器。只返回 JSON：{"pass":boolean,"reason":string}。仅判断语言是否得体、态度是否真诚。`, fmt.Sprintf("内容: %s\n已完成的人类评审: %s", subject, reviews))
 	if err != nil {
+		a.recordLLMFailure(ctx, jobKey, err)
 		return err
 	}
 	var verdict fallbackReviewResult
 	if err = json.Unmarshal(raw, &verdict); err != nil {
+		a.recordLLMFailure(ctx, jobKey, err)
 		return err
 	}
 	final := "reject"
@@ -151,8 +166,11 @@ func (a *Activities) FinalizeBlindReview(ctx context.Context, batchID int64) err
 		return err
 	}
 	affected, _ := result.RowsAffected()
+	if _, err = tx.ExecContext(ctx, `UPDATE llm_jobs SET status='completed',result=$2,prompt_tokens=$3,completion_tokens=$4,latency_ms=$5,completed_at=CURRENT_TIMESTAMP,error_message='' WHERE job_key=$1`, jobKey, raw, usage.PromptTokens, usage.CompletionTokens, usage.LatencyMS); err != nil {
+		return err
+	}
 	if affected == 0 {
-		return nil
+		return tx.Commit()
 	}
 	if subjectType == "topic" {
 		contentStatus := "rejected"

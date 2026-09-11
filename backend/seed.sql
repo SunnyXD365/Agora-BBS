@@ -1,30 +1,41 @@
--- podman exec -i agora-postgres psql -U agora_user -d agora_db < ./seed.sql
--- 1. 初始化分类 (Categories)
-INSERT INTO categories (id, name, slug, description, sort_order)
-VALUES
-  (1, '综合讨论', 'general', '默认交流与综合话题讨论区', 0),
-  (2, 'Go 语言技术', 'golang', 'Go 高并发架构、标准库与开源框架讨论', 1),
-  (3, '前端开发', 'frontend', 'Vue / React 组件与前端工程化讨论', 2)
-ON CONFLICT (id) DO UPDATE 
-SET name = EXCLUDED.name, slug = EXCLUDED.slug, description = EXCLUDED.description;
+-- 仅用于本地开发/课堂演示。执行前 API 应已完成全部迁移。
+-- PowerShell: Get-Content backend/seed.sql -Raw | docker exec -i agora-postgres psql -U agora_user -d agora_db
 
--- 重置 categories_id_seq 序列，防止后续通过 API 发帖/创分类时主键冲突
-SELECT setval(pg_get_serial_sequence('categories', 'id'), COALESCE(MAX(id), 1)) FROM categories;
+INSERT INTO categories(name,slug,description,sort_order,is_active,requires_review) VALUES
+  ('综合讨论','general','默认交流与综合话题讨论区',0,TRUE,FALSE),
+  ('技术实践','technology','软件工程与技术实践',10,TRUE,FALSE),
+  ('公共议题','public-issues','需要更审慎表达的高争议讨论区',20,TRUE,TRUE)
+ON CONFLICT(slug) DO UPDATE SET name=EXCLUDED.name,description=EXCLUDED.description,sort_order=EXCLUDED.sort_order,is_active=TRUE,requires_review=EXCLUDED.requires_review;
 
--- 2. 初始化官方/测试账号 (Users)
--- 密码明文均为: 123456 (BCrypt 哈希: $2a$10$e883mAn9p2rIqYl/8jM88u8J7XwU22k95fB6iHk7X1SgQ8G3K3X6W)
-INSERT INTO users (id, username, email, password_hash)
-VALUES
-  (1, 'agora_admin', 'admin@agora.com', '$2a$10$e883mAn9p2rIqYl/8jM88u8J7XwU22k95fB6iHk7X1SgQ8G3K3X6W'),
-  (2, 'gopher_test', 'gopher@example.com', '$2a$10$e883mAn9p2rIqYl/8jM88u8J7XwU22k95fB6iHk7X1SgQ8G3K3X6W')
-ON CONFLICT (id) DO NOTHING;
+-- 以下账号的本地演示密码均为 password；生产环境禁止执行本文件。
+INSERT INTO users(username,email,password_hash,role,status) VALUES
+  ('demo_admin','demo-admin@agora.local','$2a$10$CukE6vTZfw8gYajkRiCyk.hWDK0Z9N4DD2dlvvXF1nRS4jciYqeNu','admin','active'),
+  ('demo_l0','demo-l0@agora.local','$2a$10$CukE6vTZfw8gYajkRiCyk.hWDK0Z9N4DD2dlvvXF1nRS4jciYqeNu','user','active'),
+  ('demo_l1','demo-l1@agora.local','$2a$10$CukE6vTZfw8gYajkRiCyk.hWDK0Z9N4DD2dlvvXF1nRS4jciYqeNu','user','active'),
+  ('demo_l2','demo-l2@agora.local','$2a$10$CukE6vTZfw8gYajkRiCyk.hWDK0Z9N4DD2dlvvXF1nRS4jciYqeNu','user','active'),
+  ('demo_l3_a','demo-l3-a@agora.local','$2a$10$CukE6vTZfw8gYajkRiCyk.hWDK0Z9N4DD2dlvvXF1nRS4jciYqeNu','user','active'),
+  ('demo_l3_b','demo-l3-b@agora.local','$2a$10$CukE6vTZfw8gYajkRiCyk.hWDK0Z9N4DD2dlvvXF1nRS4jciYqeNu','user','active'),
+  ('demo_l3_c','demo-l3-c@agora.local','$2a$10$CukE6vTZfw8gYajkRiCyk.hWDK0Z9N4DD2dlvvXF1nRS4jciYqeNu','user','active')
+ON CONFLICT(username) DO UPDATE SET email=EXCLUDED.email,password_hash=EXCLUDED.password_hash,role=EXCLUDED.role,status='active',updated_at=CURRENT_TIMESTAMP;
 
-SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE(MAX(id), 1)) FROM users;
+UPDATE user_trust_profiles tp SET
+  unlock_level=CASE u.username WHEN 'demo_l0' THEN 0 WHEN 'demo_l1' THEN 1 WHEN 'demo_l2' THEN 2 ELSE 3 END,
+  trust_score=CASE WHEN u.username='demo_l0' THEN 0 ELSE 20 END,
+  verified_read_seconds=CASE u.username WHEN 'demo_l0' THEN 0 WHEN 'demo_l1' THEN 60 WHEN 'demo_l2' THEN 180 ELSE 300 END,
+  compliant_interactions=CASE WHEN u.username IN ('demo_admin','demo_l3_a','demo_l3_b','demo_l3_c') THEN 5 WHEN u.username='demo_l2' THEN 2 ELSE 0 END,
+  audit_probability=0.05,
+  updated_at=CURRENT_TIMESTAMP
+FROM users u WHERE tp.user_id=u.id AND u.username IN ('demo_admin','demo_l0','demo_l1','demo_l2','demo_l3_a','demo_l3_b','demo_l3_c');
 
--- 3. 初始化官方贴 (Topics)
-INSERT INTO topics (id, category_id, user_id, title, content)
-VALUES
-  (1, 1, 1, '欢迎使用 Agora BBS 论坛系统', 'Agora-Backend 已打通基础核心架构，欢迎在各板块交流讨论！')
-ON CONFLICT (id) DO NOTHING;
+UPDATE user_profiles p SET
+  onboarding_statement='本账号用于本地课堂演示，承诺基于事实、尊重他人并说明判断依据。',
+  background_tag=CASE u.username WHEN 'demo_l3_a' THEN 'engineering' WHEN 'demo_l3_b' THEN 'humanities' WHEN 'demo_l3_c' THEN 'design' ELSE 'education' END,
+  onboarding_status=CASE WHEN u.username='demo_l0' THEN 'not_submitted' ELSE 'approved' END,
+  updated_at=CURRENT_TIMESTAMP
+FROM users u WHERE p.user_id=u.id AND u.username IN ('demo_admin','demo_l0','demo_l1','demo_l2','demo_l3_a','demo_l3_b','demo_l3_c');
 
-SELECT setval(pg_get_serial_sequence('topics', 'id'), COALESCE(MAX(id), 1)) FROM topics;
+INSERT INTO topics(category_id,user_id,title,content,structured_content,status)
+SELECT c.id,u.id,'欢迎来到 Agora-BBS','这是用于本地演示的公开主题。',jsonb_build_object('claim','这是用于本地演示的公开主题。','evidence','项目通过阅读感知、冷静期和匿名盲审改善讨论过程。','uncertainty','欢迎通过结构化回复补充不同视角。'),'published'
+FROM categories c CROSS JOIN users u
+WHERE c.slug='general' AND u.username='demo_admin'
+  AND NOT EXISTS(SELECT 1 FROM topics WHERE title='欢迎来到 Agora-BBS');

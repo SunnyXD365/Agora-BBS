@@ -1,6 +1,10 @@
 package router
 
 import (
+	"database/sql"
+	"time"
+
+	"agora-backend/internal/cache"
 	"github.com/gin-gonic/gin"
 
 	"agora-backend/internal/config"
@@ -18,11 +22,14 @@ type Handlers struct {
 	GovernanceHandler *handler.GovernanceHandler
 	FeedbackHandler   *handler.FeedbackHandler
 	ReviewHandler     *handler.ReviewHandler
+	AdminHandler      *handler.AdminHandler
 }
 
-func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
+func SetupRouter(cfg *config.Config, store *cache.Store, database *sql.DB, h *Handlers) *gin.Engine {
 	r := gin.Default()
+	_ = r.SetTrustedProxies([]string{"127.0.0.1", "172.16.0.0/12"})
 	r.Use(middleware.RequestID())
+	r.Use(middleware.RateLimit(store, "api", 120000, time.Minute))
 
 	v1 := r.Group("/api/v1")
 	v1.Use(middleware.OptionalJWT(cfg.JWTSecret))
@@ -34,6 +41,7 @@ func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
 
 		// 1. 公开路由
 		auth := v1.Group("/auth")
+		auth.Use(middleware.RateLimit(store, "auth", 30, time.Minute))
 		{
 			auth.POST("/register", h.UserHandler.Register)
 			auth.POST("/login", h.UserHandler.Login)
@@ -77,6 +85,22 @@ func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
 
 			protected.POST("/likes", h.LikeHandler.Like)
 			protected.DELETE("/likes", h.LikeHandler.Unlike)
+		}
+
+		admin := v1.Group("/admin")
+		admin.Use(middleware.JWTAuth(cfg.JWTSecret), middleware.AdminOnly(database))
+		{
+			admin.GET("/overview", h.AdminHandler.Overview)
+			admin.GET("/users", h.AdminHandler.Users)
+			admin.PATCH("/users/:id/status", h.AdminHandler.SetUserStatus)
+			admin.GET("/contents", h.AdminHandler.Contents)
+			admin.PATCH("/contents/:type/:id/visibility", h.AdminHandler.SetContentVisibility)
+			admin.GET("/llm-jobs", h.AdminHandler.LLMJobs)
+			admin.GET("/trust-logs", h.AdminHandler.TrustLogs)
+			admin.POST("/llm-jobs/:id/retry", h.AdminHandler.RetryLLMJob)
+			admin.GET("/categories", h.AdminHandler.Categories)
+			admin.POST("/categories", h.AdminHandler.CreateCategory)
+			admin.PATCH("/categories/:id", h.AdminHandler.UpdateCategory)
 		}
 	}
 

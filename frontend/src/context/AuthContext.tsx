@@ -16,12 +16,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [token, setToken] = useState<string | null>(() =>
-    typeof window === 'undefined' ? null : localStorage.getItem('token'),
-  );
-  const [isLoading, setIsLoading] = useState(() =>
-    typeof window !== 'undefined' && Boolean(localStorage.getItem('token')),
-  );
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const logout = useCallback(() => {
     localStorage.removeItem('token');
@@ -30,26 +26,43 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setIsLoading(false);
   }, []);
 
-  // 初始化：自动恢复登录态
+  // 在挂载后读取浏览器存储，避免服务端渲染与首次 hydration 的状态不一致。
   useEffect(() => {
-    if (token) {
-      authApi.getMe()
-        .then((res) => {
-          if (res.code === 0) {
-            setUser(res.data);
-          } else {
-            logout();
-          }
-        })
-        .catch(() => logout())
-        .finally(() => setIsLoading(false));
-    }
-  }, [logout, token]);
+    let cancelled = false;
+    const restoreSession = async () => {
+      // 让状态更新发生在异步恢复流程中，而不是 effect 的同步执行阶段。
+      await Promise.resolve();
+      if (cancelled) return;
+      const storedToken = localStorage.getItem('token');
+      if (!storedToken) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const res = await authApi.getMe();
+        if (cancelled) return;
+        if (res.code === 0) {
+          setToken(storedToken);
+          setUser(res.data);
+        } else {
+          logout();
+        }
+      } catch {
+        if (!cancelled) logout();
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    void restoreSession();
+    return () => { cancelled = true; };
+  }, [logout]);
 
   const login = (newToken: string, newUser: UserProfile) => {
     localStorage.setItem('token', newToken);
     setToken(newToken);
     setUser(newUser);
+    setIsLoading(false);
   };
 
   return (
