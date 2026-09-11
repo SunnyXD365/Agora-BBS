@@ -4,10 +4,17 @@ import {
   AuthData,
   Bookmark,
   Category,
+  CommentCluster,
+  ContextualFeedback,
+  FeedbackStance,
+  FeedbackSummary,
+  FeedbackTag,
   PageData,
   Post,
   GovernancePolicy,
   ReadingSession,
+  ReviewSubmission,
+  ReviewTask,
   StructuredContent,
   Topic,
   UserProfile,
@@ -82,4 +89,21 @@ export const bookmarkApi = {
     api.put<ApiResponse<{ bookmarked: boolean }>, ApiResponse<{ bookmarked: boolean }>>(`/bookmarks/${topicId}`),
   remove: (topicId: number) =>
     api.delete<ApiResponse<{ bookmarked: boolean }>, ApiResponse<{ bookmarked: boolean }>>(`/bookmarks/${topicId}`),
+};
+
+export const feedbackApi = {
+  summary: (targetType: 'topic' | 'post', targetId: number) =>
+    api.get<ApiResponse<FeedbackSummary>, ApiResponse<FeedbackSummary>>('/feedbacks/summary', { params: { target_type: targetType, target_id: targetId } }),
+  upsert: (data: { target_type: 'topic' | 'post'; target_id: number; stance: FeedbackStance; tag: FeedbackTag; reason: string }) =>
+    api.post<ApiResponse<ContextualFeedback>, ApiResponse<ContextualFeedback>>('/feedbacks', data),
+  withdraw: (id: number) =>
+    api.delete<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/feedbacks/${id}`),
+  clusters: (topicId: number) =>
+    api.get<ApiResponse<CommentCluster[]>, ApiResponse<CommentCluster[]>>(`/topics/${topicId}/clusters`),
+};
+
+export const reviewApi = {
+  list: () => api.get<ApiResponse<ReviewTask[]>, ApiResponse<ReviewTask[]>>('/reviews/tasks'),
+  submit: (id: number, data: { appropriateness: boolean; sincerity: boolean; reason: string }) =>
+    api.post<ApiResponse<ReviewSubmission>, ApiResponse<ReviewSubmission>>(`/reviews/tasks/${id}`, data),
 };

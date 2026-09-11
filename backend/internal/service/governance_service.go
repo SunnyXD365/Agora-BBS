@@ -9,6 +9,7 @@ import (
 	"agora-backend/internal/config"
 	"agora-backend/internal/dao"
 	"agora-backend/internal/model"
+	"agora-backend/internal/workflow"
 )
 
 var (
@@ -18,13 +19,14 @@ var (
 )
 
 type GovernanceService struct {
-	dao   *dao.GovernanceDAO
-	users *dao.UserDAO
-	cfg   *config.Config
+	dao     *dao.GovernanceDAO
+	users   *dao.UserDAO
+	cfg     *config.Config
+	reviews workflow.BlindReviewStarter
 }
 
-func NewGovernanceService(governanceDAO *dao.GovernanceDAO, users *dao.UserDAO, cfg *config.Config) *GovernanceService {
-	return &GovernanceService{dao: governanceDAO, users: users, cfg: cfg}
+func NewGovernanceService(governanceDAO *dao.GovernanceDAO, users *dao.UserDAO, cfg *config.Config, reviews workflow.BlindReviewStarter) *GovernanceService {
+	return &GovernanceService{dao: governanceDAO, users: users, cfg: cfg, reviews: reviews}
 }
 
 func (s *GovernanceService) Policy() model.GovernancePolicy {
@@ -66,7 +68,21 @@ func (s *GovernanceService) CompleteReading(ctx context.Context, userID int64, p
 }
 
 func (s *GovernanceService) SaveOnboarding(ctx context.Context, userID int64, req *model.OnboardingReq) error {
-	return s.dao.SaveOnboarding(ctx, userID, req.Statement, req.BackgroundTag)
+	if err := s.dao.SaveOnboarding(ctx, userID, req.Statement, req.BackgroundTag); err != nil {
+		return err
+	}
+	return s.reviews.StartBlindReview(ctx, "user", userID)
+}
+
+func (s *GovernanceService) RequireReviewPermission(ctx context.Context, userID int64) error {
+	user, err := s.users.GetUserByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user == nil || (user.UnlockLevel < 3 && user.Role != "admin") {
+		return errors.New("blind review permission is not unlocked")
+	}
+	return nil
 }
 
 func (s *GovernanceService) RequireTopicPermission(ctx context.Context, userID int64) error {
@@ -100,6 +116,17 @@ func (s *GovernanceService) RequireReplyPermission(ctx context.Context, userID, 
 		if !eligible {
 			return ErrReadingRequired
 		}
+	}
+	return nil
+}
+
+func (s *GovernanceService) RequireFeedbackPermission(ctx context.Context, userID int64) error {
+	user, err := s.users.GetUserByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user == nil || (user.UnlockLevel < 1 && user.Role != "admin") {
+		return ErrReplyLocked
 	}
 	return nil
 }

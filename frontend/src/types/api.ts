@@ -114,3 +114,64 @@ export interface ReadingSession {
   completed: boolean;
   last_heartbeat_at: string;
 }
+
+export type FeedbackStance = 'support' | 'challenge';
+export type FeedbackTag = 'logical' | 'new_perspective' | 'well_sourced' | 'empathetic' | 'factual_concern' | 'reasoning_gap' | 'inappropriate' | 'legacy_support';
+
+export interface ContextualFeedback {
+  id: number;
+  user_id: number;
+  target_type: 'topic' | 'post';
+  target_id: number;
+  stance: FeedbackStance;
+  tag: FeedbackTag;
+  reason: string;
+  status: string;
+  llm_audit_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeedbackSummary {
+  support: number;
+  challenge: number;
+  score: number;
+  tags: Partial<Record<FeedbackTag, number>>;
+  mine?: ContextualFeedback;
+}
+
+export interface CommentCluster {
+  id: number;
+  topic_id: number;
+  tag: string;
+  summary: string;
+  weight: number;
+  post_ids: number[];
+  generation: number;
+  created_at: string;
+}
+
+export interface ReviewTask {
+  id: number;
+  batch_id: number;
+  subject_type: 'user' | 'topic';
+  subject: {
+    statement?: string;
+    background_tag?: string;
+    title?: string;
+    claim?: string;
+    evidence?: string;
+    uncertainty?: string;
+  };
+  task_status: string;
+  deadline: string;
+  created_at: string;
+}
+
+export interface ReviewSubmission {
+  id: number;
+  batch_id: number;
+  result: 'pass' | 'reject';
+  llm_check_status: string;
+  completed_at: string;
+}

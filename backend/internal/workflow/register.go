@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 )
@@ -10,7 +11,15 @@ import (
 func Register(w worker.Worker, activities *Activities) {
 	w.RegisterWorkflow(SystemHealthWorkflow)
 	w.RegisterWorkflow(ContentCoolingWorkflow)
+	w.RegisterWorkflow(FeedbackAuditWorkflow)
+	w.RegisterWorkflow(BlindReviewWorkflow)
+	w.RegisterWorkflow(ReviewAuditWorkflow)
 	registerActivities(w, activities)
+	w.RegisterActivityWithOptions(activities.AuditFeedback, activity.RegisterOptions{Name: "AuditFeedback"})
+	w.RegisterActivityWithOptions(activities.ClusterTopic, activity.RegisterOptions{Name: "ClusterTopic"})
+	w.RegisterActivityWithOptions(activities.CreateBlindReviewBatch, activity.RegisterOptions{Name: "CreateBlindReviewBatch"})
+	w.RegisterActivityWithOptions(activities.FinalizeBlindReview, activity.RegisterOptions{Name: "FinalizeBlindReview"})
+	w.RegisterActivityWithOptions(activities.AuditReview, activity.RegisterOptions{Name: "AuditReview"})
 }
 
 // SystemHealthWorkflow gives deployment smoke tests a deterministic way to

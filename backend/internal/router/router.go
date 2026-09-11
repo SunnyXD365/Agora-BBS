@@ -16,6 +16,8 @@ type Handlers struct {
 	LikeHandler       *handler.LikeHandler
 	BookmarkHandler   *handler.BookmarkHandler
 	GovernanceHandler *handler.GovernanceHandler
+	FeedbackHandler   *handler.FeedbackHandler
+	ReviewHandler     *handler.ReviewHandler
 }
 
 func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
@@ -39,12 +41,14 @@ func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
 
 		v1.GET("/categories", h.CategoryHandler.ListCategories)
 		v1.GET("/governance/policy", h.GovernanceHandler.Policy)
+		v1.GET("/feedbacks/summary", h.FeedbackHandler.Summary)
 
 		topics := v1.Group("/topics")
 		{
 			topics.GET("", h.TopicHandler.ListTopics)
 			topics.GET("/:id", h.TopicHandler.GetTopicDetail)
 			topics.GET("/:id/posts", h.PostHandler.ListPosts)
+			topics.GET("/:id/clusters", h.FeedbackHandler.Clusters)
 		}
 
 		// 2. 受保护路由
@@ -66,6 +70,10 @@ func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
 			protected.GET("/bookmarks", h.BookmarkHandler.List)
 			protected.PUT("/bookmarks/:topicId", h.BookmarkHandler.Create)
 			protected.DELETE("/bookmarks/:topicId", h.BookmarkHandler.Delete)
+			protected.POST("/feedbacks", h.FeedbackHandler.Upsert)
+			protected.DELETE("/feedbacks/:id", h.FeedbackHandler.Withdraw)
+			protected.GET("/reviews/tasks", h.ReviewHandler.List)
+			protected.POST("/reviews/tasks/:id", h.ReviewHandler.Submit)
 
 			protected.POST("/likes", h.LikeHandler.Like)
 			protected.DELETE("/likes", h.LikeHandler.Unlike)

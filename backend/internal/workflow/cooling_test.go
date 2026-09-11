@@ -13,8 +13,8 @@ import (
 func TestContentCoolingWorkflowRunsPublishActivity(t *testing.T) {
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	env.RegisterActivityWithOptions(func(context.Context, CoolingInput) (string, error) {
-		return "published", nil
+	env.RegisterActivityWithOptions(func(context.Context, CoolingInput) (PublishResult, error) {
+		return PublishResult{Status: "published"}, nil
 	}, activity.RegisterOptions{Name: "PublishContent"})
 	env.ExecuteWorkflow(ContentCoolingWorkflow, CoolingInput{Kind: "topic", ID: 7, EndsAt: time.Time{}})
 	require.True(t, env.IsWorkflowCompleted())

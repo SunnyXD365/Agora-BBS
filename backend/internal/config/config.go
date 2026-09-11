@@ -17,6 +17,9 @@ type Config struct {
 	GovernanceCoolingSeconds    int
 	GovernanceReplyDwellSeconds int
 	GovernanceLongTopicChars    int
+	LLMBaseURL                  string
+	LLMModel                    string
+	LLMAPIKey                   string
 }
 
 // 从环境变量加载配置，提供默认备选项
@@ -41,6 +44,9 @@ func LoadConfig() *Config {
 		GovernanceCoolingSeconds:    coolingSeconds,
 		GovernanceReplyDwellSeconds: replyDwellSeconds,
 		GovernanceLongTopicChars:    longTopicChars,
+		LLMBaseURL:                  getEnv("LLM_BASE_URL", ""),
+		LLMModel:                    getEnv("LLM_MODEL", ""),
+		LLMAPIKey:                   getEnv("LLM_API_KEY", ""),
 	}
 }
 

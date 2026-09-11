@@ -5,6 +5,7 @@ import (
 
 	"agora-backend/internal/config"
 	"agora-backend/internal/db"
+	"agora-backend/internal/llm"
 	agoraworkflow "agora-backend/internal/workflow"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -24,7 +25,8 @@ func main() {
 	defer database.Close()
 
 	w := worker.New(temporalClient, cfg.TemporalTaskQueue, worker.Options{})
-	agoraworkflow.Register(w, &agoraworkflow.Activities{DB: database})
+	llmClient := llm.NewOpenAICompatibleClient(cfg.LLMBaseURL, cfg.LLMModel, cfg.LLMAPIKey)
+	agoraworkflow.Register(w, &agoraworkflow.Activities{DB: database, LLM: llmClient})
 	log.Printf("[Worker] polling task queue %q", cfg.TemporalTaskQueue)
 	if err := w.Run(worker.InterruptCh()); err != nil {
 		log.Fatalf("[Worker] stopped: %v", err)

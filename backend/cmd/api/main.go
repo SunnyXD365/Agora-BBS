@@ -44,15 +44,19 @@ func main() {
 	likeDAO := dao.NewLikeDAO(database)
 	bookmarkDAO := dao.NewBookmarkDAO(database)
 	governanceDAO := dao.NewGovernanceDAO(database)
+	feedbackDAO := dao.NewFeedbackDAO(database)
+	reviewDAO := dao.NewReviewDAO(database)
 
 	// 4. Service 层初始化 (注入对应的 DAO 与配置项)
 	userService := service.NewUserService(userDAO, cfg.JWTSecret, cfg.JWTExpireHours)
 	categoryService := service.NewCategoryService(categoryDAO)
-	governanceService := service.NewGovernanceService(governanceDAO, userDAO, cfg)
+	governanceService := service.NewGovernanceService(governanceDAO, userDAO, cfg, coolingStarter)
 	topicService := service.NewTopicService(topicDAO, governanceService, coolingStarter)
 	postService := service.NewPostService(postDAO, governanceService, coolingStarter)
 	likeService := service.NewLikeService(likeDAO)
 	bookmarkService := service.NewBookmarkService(bookmarkDAO)
+	feedbackService := service.NewFeedbackService(feedbackDAO, governanceService, coolingStarter)
+	reviewService := service.NewReviewService(reviewDAO, governanceService, coolingStarter)
 
 	// 5. Handler 层初始化 (注入对应的 Service)
 	userHandler := handler.NewUserHandler(userService)
@@ -62,6 +66,8 @@ func main() {
 	likeHandler := handler.NewLikeHandler(likeService)
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkService)
 	governanceHandler := handler.NewGovernanceHandler(governanceService)
+	feedbackHandler := handler.NewFeedbackHandler(feedbackService)
+	reviewHandler := handler.NewReviewHandler(reviewService)
 
 	// 6. 组装 Handlers 并传递给 SetupRouter
 	handlers := &router.Handlers{
@@ -72,6 +78,8 @@ func main() {
 		LikeHandler:       likeHandler,
 		BookmarkHandler:   bookmarkHandler,
 		GovernanceHandler: governanceHandler,
+		FeedbackHandler:   feedbackHandler,
+		ReviewHandler:     reviewHandler,
 	}
 
 	r := router.SetupRouter(cfg, handlers)

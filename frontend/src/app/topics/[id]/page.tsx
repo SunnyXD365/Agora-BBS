@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Post, Topic } from '@/types/api';
-import { bookmarkApi, getErrorMessage, governanceApi, postApi, topicApi } from '@/services';
+import { CommentCluster, Post, Topic } from '@/types/api';
+import { bookmarkApi, feedbackApi, getErrorMessage, governanceApi, postApi, topicApi } from '@/services';
 import { GovernancePolicy } from '@/types/api';
 import { useAuth } from '@/context/AuthContext';
+import ContextualFeedback from '@/components/ContextualFeedback';
 
 type PostNode = Post & { children: PostNode[] };
 
@@ -25,7 +26,7 @@ function toPostTree(posts: Post[]): PostNode[] {
   return roots;
 }
 
-function PostBranch({ node, depth, onReply, onRecall, currentUserID }: { node: PostNode; depth: number; onReply: (post: Post) => void; onRecall: (post: Post) => void; currentUserID?: number }) {
+function PostBranch({ node, depth, onReply, onRecall, currentUserID, canFeedback }: { node: PostNode; depth: number; onReply: (post: Post) => void; onRecall: (post: Post) => void; currentUserID?: number; canFeedback: boolean }) {
   return (
     <div className={depth ? 'ml-4 border-l border-[var(--border-paper)] pl-4' : ''}>
       <article className="paper-card mb-3 rounded-xl p-4">
@@ -36,8 +37,9 @@ function PostBranch({ node, depth, onReply, onRecall, currentUserID }: { node: P
         <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-gray-800">{node.content}</p>
         <button onClick={() => onReply(node)} className="mt-3 text-xs font-semibold text-[var(--accent-ink)] hover:underline">回复这条发言</button>
         {node.status === 'cooling' && node.user_id === currentUserID && <button onClick={() => onRecall(node)} className="ml-4 text-xs text-red-700 hover:underline">无痕撤回</button>}
+        {node.status === 'published' && <ContextualFeedback targetType="post" targetId={node.id} enabled={canFeedback && node.user_id !== currentUserID} />}
       </article>
-      {node.children.map((child) => <PostBranch key={child.id} node={child} depth={depth + 1} onReply={onReply} onRecall={onRecall} currentUserID={currentUserID} />)}
+      {node.children.map((child) => <PostBranch key={child.id} node={child} depth={depth + 1} onReply={onReply} onRecall={onRecall} currentUserID={currentUserID} canFeedback={canFeedback} />)}
     </div>
   );
 }
@@ -61,20 +63,21 @@ export default function TopicDetailPage() {
   const [readingProgress, setReadingProgress] = useState(0);
   const [readingSeconds, setReadingSeconds] = useState(0);
   const [readingEligible, setReadingEligible] = useState(false);
+  const [clusters, setClusters] = useState<CommentCluster[]>([]);
+  const [selectedCluster, setSelectedCluster] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const progressRef = useRef(0);
   const replyFocusedRef = useRef(false);
   const completionStartedRef = useRef(false);
-  const postTree = useMemo(() => toPostTree(posts), [posts]);
-
   useEffect(() => {
     if (!topicId) return;
     let cancelled = false;
-    Promise.all([topicApi.getTopicDetail(topicId), postApi.getPosts(topicId, { page: 1, page_size: 50 })])
-      .then(([topicRes, postsRes]) => {
+    Promise.all([topicApi.getTopicDetail(topicId), postApi.getPosts(topicId, { page: 1, page_size: 50 }), feedbackApi.clusters(topicId)])
+      .then(([topicRes, postsRes, clusterRes]) => {
         if (cancelled) return;
         if (topicRes.code === 0) setTopic(topicRes.data);
         if (postsRes.code === 0) setPosts(postsRes.data.items);
+        if (clusterRes.code === 0) setClusters(clusterRes.data);
       })
       .catch((err: unknown) => { if (!cancelled) setError(getErrorMessage(err, '主题加载失败')); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -173,6 +176,9 @@ export default function TopicDetailPage() {
   const contentChars = `${topic.structured_content?.claim ?? topic.content}${topic.structured_content?.evidence ?? ''}${topic.structured_content?.uncertainty ?? ''}`.length;
   const requiresReading = Boolean(policy && contentChars >= policy.long_topic_chars);
   const canReply = Boolean(user?.capabilities.includes('reply')) && (!requiresReading || readingEligible);
+  const canFeedback = Boolean(user?.capabilities.includes('feedback'));
+  const visiblePosts = selectedCluster ? posts.filter((post) => clusters.find((cluster) => cluster.id === selectedCluster)?.post_ids.includes(post.id)) : posts;
+  const visiblePostTree = toPostTree(visiblePosts);
   const coolingRemaining = topic.cooling_ends_at ? Math.max(0, Math.ceil((new Date(topic.cooling_ends_at).getTime() - now) / 1000)) : 0;
 
   return (
@@ -189,7 +195,7 @@ export default function TopicDetailPage() {
           {topic.structured_content?.evidence && <section><h2 className="font-bold">支持依据</h2><p className="mt-1 whitespace-pre-wrap">{topic.structured_content.evidence}</p></section>}
           {topic.structured_content?.uncertainty && <section><h2 className="font-bold">仍不确定的地方</h2><p className="mt-1 whitespace-pre-wrap">{topic.structured_content.uncertainty}</p></section>}
         </div>
-        <footer className="flex justify-end border-t border-[var(--border-paper)] pt-4"><button onClick={handleBookmark} className="rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-stone-100">{bookmarked ? '已收藏' : '收藏主题'}</button></footer>
+        <footer className="border-t border-[var(--border-paper)] pt-4"><div className="flex justify-end"><button onClick={handleBookmark} className="rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-stone-100">{bookmarked ? '已收藏' : '收藏主题'}</button></div>{topic.status === 'published' && <ContextualFeedback targetType="topic" targetId={topic.id} enabled={canFeedback && topic.user_id !== user?.id} />}</footer>
       </article>
       <section className="paper-card rounded-xl p-6">
         <h2 className="text-sm font-bold">发表回复</h2>
@@ -203,7 +209,8 @@ export default function TopicDetailPage() {
       </section>
       <section>
         <h2 className="mb-3 text-sm font-bold">全部回复（{posts.length}）</h2>
-        {postTree.length === 0 ? <div className="paper-card rounded-xl p-8 text-center text-sm text-[var(--text-muted)]">暂无回复。</div> : postTree.map((node) => <PostBranch key={node.id} node={node} depth={0} onReply={setReplyTo} onRecall={handleRecallPost} currentUserID={user?.id} />)}
+        {clusters.length > 0 && <div className="mb-4 flex flex-wrap gap-2 rounded-lg bg-stone-100 p-3 text-xs"><button onClick={() => setSelectedCluster(null)} className={`rounded-full px-3 py-1 ${selectedCluster === null ? 'bg-stone-800 text-white' : 'bg-white'}`}>全部讨论</button>{clusters.map((cluster) => <button key={cluster.id} title={cluster.summary} onClick={() => setSelectedCluster(cluster.id)} className={`rounded-full px-3 py-1 ${selectedCluster === cluster.id ? 'bg-stone-800 text-white' : 'bg-white'}`}>{cluster.tag} · {cluster.post_ids.length}</button>)}</div>}
+        {visiblePostTree.length === 0 ? <div className="paper-card rounded-xl p-8 text-center text-sm text-[var(--text-muted)]">{selectedCluster ? '该讨论标签下暂无可见回复。' : '暂无回复。'}</div> : visiblePostTree.map((node) => <PostBranch key={node.id} node={node} depth={0} onReply={setReplyTo} onRecall={handleRecallPost} currentUserID={user?.id} canFeedback={canFeedback} />)}
       </section>
     </div>
   );
