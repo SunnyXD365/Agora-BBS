@@ -14,6 +14,9 @@ test('registration, cooling, feedback, blind review and administration', async (
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '第一次来到 Agora' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '社区概览' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '快捷入口' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: '分页导航' })).toBeVisible();
   await page.getByRole('link', { name: '查看完整论坛使用手册' }).click();
   await expect(page.getByRole('heading', { name: '论坛使用手册' })).toBeVisible();
 
@@ -78,4 +81,24 @@ test('registration, cooling, feedback, blind review and administration', async (
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: '社区治理后台' })).toBeVisible();
   await expect(page.getByText('LLM 作业与失败重试')).toBeVisible();
+  expect(await page.getByRole('navigation', { name: '分页导航' }).count()).toBeGreaterThanOrEqual(3);
+});
+
+test('homepage pagination requests and renders the selected page', async ({ page }) => {
+  await page.route('**/api/v1/topics?**', async (route) => {
+    const requestedPage = Number(new URL(route.request().url()).searchParams.get('page') || 1);
+    const topic = {
+      id: 9000 + requestedPage, category_id: 1, user_id: 1, author_name: 'pagination_test',
+      title: `分页测试主题 · 第 ${requestedPage} 页`, content: '用于验证分页请求。',
+      structured_content: { claim: '用于验证分页请求。', evidence: '', uncertainty: '' }, status: 'published',
+      view_count: requestedPage, post_count: 0, like_count: 0,
+      created_at: '2026-09-11T00:00:00Z', updated_at: '2026-09-11T00:00:00Z',
+    };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ code: 0, msg: 'success', data: { items: [topic], total: 21, page: requestedPage, page_size: 10 }, request_id: 'e2e-pagination' }) });
+  });
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: '分页测试主题 · 第 1 页', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '下一页' }).click();
+  await expect(page.getByRole('link', { name: '分页测试主题 · 第 2 页', exact: true })).toBeVisible();
+  await expect(page.getByText('第 2/3 页')).toBeVisible();
 });

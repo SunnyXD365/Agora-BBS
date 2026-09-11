@@ -7,8 +7,10 @@ import { bookmarkApi, feedbackApi, getErrorMessage, governanceApi, postApi, topi
 import { GovernancePolicy } from '@/types/api';
 import { useAuth } from '@/context/AuthContext';
 import ContextualFeedback from '@/components/ContextualFeedback';
+import Pagination from '@/components/Pagination';
 
 type PostNode = Post & { children: PostNode[] };
+const POST_PAGE_SIZE = 20;
 
 const postTypeLabels: Record<Post['post_type'], string> = {
   debate: '质疑与辩论', evidence: '补充论据', experience: '个人经历', thanks: '单纯感谢',
@@ -51,6 +53,9 @@ export default function TopicDetailPage() {
   const topicId = Number(params.id);
   const [topic, setTopic] = useState<Topic | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [postPage, setPostPage] = useState(1);
+  const [postTotal, setPostTotal] = useState(0);
+  const [postsLoading, setPostsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [bookmarked, setBookmarked] = useState(false);
@@ -72,17 +77,26 @@ export default function TopicDetailPage() {
   useEffect(() => {
     if (!topicId) return;
     let cancelled = false;
-    Promise.all([topicApi.getTopicDetail(topicId), postApi.getPosts(topicId, { page: 1, page_size: 50 }), feedbackApi.clusters(topicId)])
-      .then(([topicRes, postsRes, clusterRes]) => {
+    Promise.all([topicApi.getTopicDetail(topicId), feedbackApi.clusters(topicId)])
+      .then(([topicRes, clusterRes]) => {
         if (cancelled) return;
         if (topicRes.code === 0) setTopic(topicRes.data);
-        if (postsRes.code === 0) setPosts(postsRes.data.items);
         if (clusterRes.code === 0) setClusters(clusterRes.data);
       })
       .catch((err: unknown) => { if (!cancelled) setError(getErrorMessage(err, '主题加载失败')); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [topicId]);
+
+  useEffect(() => {
+    if (!topicId) return;
+    let cancelled = false;
+    postApi.getPosts(topicId, { page: postPage, page_size: POST_PAGE_SIZE })
+      .then((result) => { if (!cancelled) { setPosts(result.data.items); setPostTotal(result.data.total); } })
+      .catch((err: unknown) => { if (!cancelled) setError(getErrorMessage(err, '回复加载失败')); })
+      .finally(() => { if (!cancelled) setPostsLoading(false); });
+    return () => { cancelled = true; };
+  }, [postPage, topicId]);
 
   useEffect(() => {
     const updateProgress = () => {
@@ -133,8 +147,12 @@ export default function TopicDetailPage() {
   }, []);
 
   const refreshPosts = async () => {
-    const result = await postApi.getPosts(topicId, { page: 1, page_size: 50 });
-    if (result.code === 0) setPosts(result.data.items);
+    const result = await postApi.getPosts(topicId, { page: postPage, page_size: POST_PAGE_SIZE });
+    if (result.code === 0) {
+      const lastPage = Math.max(1, Math.ceil(result.data.total / POST_PAGE_SIZE));
+      if (postPage > lastPage) { setPostsLoading(true); setPostPage(lastPage); return; }
+      setPosts(result.data.items); setPostTotal(result.data.total);
+    }
   };
 
   const handleBookmark = async () => {
@@ -154,7 +172,9 @@ export default function TopicDetailPage() {
     try {
       const result = await postApi.createPost(topicId, { content: replyContent, parent_id: replyTo?.id, post_type: replyType });
       if (result.code === 0) {
-        setReplyContent(''); setReplyTo(null); await refreshPosts();
+        setReplyContent(''); setReplyTo(null);
+        const nextPage = Math.max(1, Math.ceil((postTotal + 1) / POST_PAGE_SIZE));
+        if (nextPage === postPage) await refreshPosts(); else { setPostsLoading(true); setPostPage(nextPage); }
         setTopic((current) => current ? { ...current, post_count: current.post_count + 1 } : current);
       }
     } catch (err: unknown) { setError(getErrorMessage(err, '回复发表失败')); }
@@ -208,9 +228,10 @@ export default function TopicDetailPage() {
         </form>
       </section>
       <section>
-        <h2 className="mb-3 text-sm font-bold">全部回复（{posts.length}）</h2>
+        <h2 className="mb-3 text-sm font-bold">全部回复（{postTotal}）</h2>
         {clusters.length > 0 && <div className="mb-4 flex flex-wrap gap-2 rounded-lg bg-stone-100 p-3 text-xs"><button onClick={() => setSelectedCluster(null)} className={`rounded-full px-3 py-1 ${selectedCluster === null ? 'bg-stone-800 text-white' : 'bg-white'}`}>全部讨论</button>{clusters.map((cluster) => <button key={cluster.id} title={cluster.summary} onClick={() => setSelectedCluster(cluster.id)} className={`rounded-full px-3 py-1 ${selectedCluster === cluster.id ? 'bg-stone-800 text-white' : 'bg-white'}`}>{cluster.tag} · {cluster.post_ids.length}</button>)}</div>}
-        {visiblePostTree.length === 0 ? <div className="paper-card rounded-xl p-8 text-center text-sm text-[var(--text-muted)]">{selectedCluster ? '该讨论标签下暂无可见回复。' : '暂无回复。'}</div> : visiblePostTree.map((node) => <PostBranch key={node.id} node={node} depth={0} onReply={setReplyTo} onRecall={handleRecallPost} currentUserID={user?.id} canFeedback={canFeedback} />)}
+        {postsLoading ? <div className="h-32 animate-pulse rounded-xl bg-stone-200" /> : visiblePostTree.length === 0 ? <div className="paper-card rounded-xl p-8 text-center text-sm text-[var(--text-muted)]">{selectedCluster ? '该讨论标签在本页暂无可见回复，可切换其他页查看。' : '暂无回复。'}</div> : visiblePostTree.map((node) => <PostBranch key={node.id} node={node} depth={0} onReply={setReplyTo} onRecall={handleRecallPost} currentUserID={user?.id} canFeedback={canFeedback} />)}
+        {!postsLoading && <Pagination page={postPage} pageSize={POST_PAGE_SIZE} total={postTotal} onPageChange={(nextPage) => { setSelectedCluster(null); setPostsLoading(true); setPostPage(nextPage); }} itemLabel="条回复" />}
       </section>
     </div>
   );

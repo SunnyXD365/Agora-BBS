@@ -115,13 +115,13 @@ export const reviewApi = {
 
 export const adminApi = {
   overview: () => api.get<ApiResponse<AdminOverview>, ApiResponse<AdminOverview>>('/admin/overview'),
-  users: () => api.get<ApiResponse<PageData<AdminUser>>, ApiResponse<PageData<AdminUser>>>('/admin/users', { params: { page_size: 100 } }),
+  users: (params?: { page?: number; page_size?: number }) => api.get<ApiResponse<PageData<AdminUser>>, ApiResponse<PageData<AdminUser>>>('/admin/users', { params }),
   setUserStatus: (id: number, status: 'active' | 'suspended') => api.patch<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/admin/users/${id}/status`, { status }),
-  contents: (type: 'topic' | 'post') => api.get<ApiResponse<PageData<AdminContent>>, ApiResponse<PageData<AdminContent>>>('/admin/contents', { params: { type, page_size: 100 } }),
+  contents: (type: 'topic' | 'post', params?: { page?: number; page_size?: number; status?: string }) => api.get<ApiResponse<PageData<AdminContent>>, ApiResponse<PageData<AdminContent>>>('/admin/contents', { params: { type, ...params } }),
   setContentVisibility: (type: 'topic' | 'post', id: number, hidden: boolean) => api.patch<ApiResponse<{ hidden: boolean }>, ApiResponse<{ hidden: boolean }>>(`/admin/contents/${type}/${id}/visibility`, { hidden }),
-  llmJobs: () => api.get<ApiResponse<PageData<AdminLLMJob>>, ApiResponse<PageData<AdminLLMJob>>>('/admin/llm-jobs', { params: { page_size: 100 } }),
+  llmJobs: (params?: { page?: number; page_size?: number; status?: string }) => api.get<ApiResponse<PageData<AdminLLMJob>>, ApiResponse<PageData<AdminLLMJob>>>('/admin/llm-jobs', { params }),
   retryLLMJob: (id: number) => api.post<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/admin/llm-jobs/${id}/retry`),
-  trustLogs: () => api.get<ApiResponse<PageData<AdminTrustLog>>, ApiResponse<PageData<AdminTrustLog>>>('/admin/trust-logs', { params: { page_size: 100 } }),
+  trustLogs: (params?: { page?: number; page_size?: number; user_id?: number }) => api.get<ApiResponse<PageData<AdminTrustLog>>, ApiResponse<PageData<AdminTrustLog>>>('/admin/trust-logs', { params }),
   categories: () => api.get<ApiResponse<Category[]>, ApiResponse<Category[]>>('/admin/categories'),
   createCategory: (data: Omit<Category, 'id'>) => api.post<ApiResponse<Category>, ApiResponse<Category>>('/admin/categories', data),
   updateCategory: (id: number, data: Omit<Category, 'id'>) => api.patch<ApiResponse<Category>, ApiResponse<Category>>(`/admin/categories/${id}`, data),

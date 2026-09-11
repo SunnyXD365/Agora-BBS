@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { adminApi, getErrorMessage } from '@/services';
 import { AdminContent, AdminLLMJob, AdminOverview, AdminTrustLog, AdminUser, Category } from '@/types/api';
+import Pagination from '@/components/Pagination';
+
+const PAGE_SIZE = 10;
 
 export default function AdminPage() {
   const { user, isLoading } = useAuth();
@@ -16,15 +19,24 @@ export default function AdminPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [newCategory, setNewCategory] = useState({ name: '', slug: '', description: '' });
+  const [userPage, setUserPage] = useState(1);
+  const [userTotal, setUserTotal] = useState(0);
+  const [contentPage, setContentPage] = useState(1);
+  const [contentTotal, setContentTotal] = useState(0);
+  const [contentType, setContentType] = useState<'topic' | 'post'>('topic');
+  const [jobPage, setJobPage] = useState(1);
+  const [jobTotal, setJobTotal] = useState(0);
+  const [logPage, setLogPage] = useState(1);
+  const [logTotal, setLogTotal] = useState(0);
 
   const load = async () => {
     setBusy(true); setError('');
     try {
-      const [overviewRes, usersRes, topicRes, postRes, jobsRes, logsRes, categoriesRes] = await Promise.all([
-        adminApi.overview(), adminApi.users(), adminApi.contents('topic'), adminApi.contents('post'), adminApi.llmJobs(), adminApi.trustLogs(), adminApi.categories(),
+      const [overviewRes, usersRes, contentRes, jobsRes, logsRes, categoriesRes] = await Promise.all([
+        adminApi.overview(), adminApi.users({ page: userPage, page_size: PAGE_SIZE }), adminApi.contents(contentType, { page: contentPage, page_size: PAGE_SIZE }), adminApi.llmJobs({ page: jobPage, page_size: PAGE_SIZE }), adminApi.trustLogs({ page: logPage, page_size: PAGE_SIZE }), adminApi.categories(),
       ]);
-      setOverview(overviewRes.data); setUsers(usersRes.data.items); setContents([...topicRes.data.items, ...postRes.data.items]);
-      setJobs(jobsRes.data.items); setLogs(logsRes.data.items); setCategories(categoriesRes.data);
+      setOverview(overviewRes.data); setUsers(usersRes.data.items); setUserTotal(usersRes.data.total); setContents(contentRes.data.items); setContentTotal(contentRes.data.total);
+      setJobs(jobsRes.data.items); setJobTotal(jobsRes.data.total); setLogs(logsRes.data.items); setLogTotal(logsRes.data.total); setCategories(categoriesRes.data);
     } catch (err: unknown) { setError(getErrorMessage(err, '管理数据加载失败')); }
     finally { setBusy(false); }
   };
@@ -32,15 +44,15 @@ export default function AdminPage() {
   useEffect(() => {
     if (isLoading || user?.role !== 'admin') return;
     let cancelled = false;
-    Promise.all([adminApi.overview(), adminApi.users(), adminApi.contents('topic'), adminApi.contents('post'), adminApi.llmJobs(), adminApi.trustLogs(), adminApi.categories()])
-      .then(([overviewRes, usersRes, topicRes, postRes, jobsRes, logsRes, categoriesRes]) => {
+    Promise.all([adminApi.overview(), adminApi.users({ page: userPage, page_size: PAGE_SIZE }), adminApi.contents(contentType, { page: contentPage, page_size: PAGE_SIZE }), adminApi.llmJobs({ page: jobPage, page_size: PAGE_SIZE }), adminApi.trustLogs({ page: logPage, page_size: PAGE_SIZE }), adminApi.categories()])
+      .then(([overviewRes, usersRes, contentRes, jobsRes, logsRes, categoriesRes]) => {
         if (cancelled) return;
-        setOverview(overviewRes.data); setUsers(usersRes.data.items); setContents([...topicRes.data.items, ...postRes.data.items]);
-        setJobs(jobsRes.data.items); setLogs(logsRes.data.items); setCategories(categoriesRes.data);
+        setOverview(overviewRes.data); setUsers(usersRes.data.items); setUserTotal(usersRes.data.total); setContents(contentRes.data.items); setContentTotal(contentRes.data.total);
+        setJobs(jobsRes.data.items); setJobTotal(jobsRes.data.total); setLogs(logsRes.data.items); setLogTotal(logsRes.data.total); setCategories(categoriesRes.data);
       })
       .catch((err: unknown) => { if (!cancelled) setError(getErrorMessage(err, '管理数据加载失败')); });
     return () => { cancelled = true; };
-  }, [isLoading, user]);
+  }, [contentPage, contentType, isLoading, jobPage, logPage, user, userPage]);
 
   const run = async (action: () => Promise<unknown>) => { setBusy(true); setError(''); try { await action(); await load(); } catch (err: unknown) { setError(getErrorMessage(err, '治理操作失败')); setBusy(false); } };
   const saveCategory = (category: Category, changes: Partial<Category>) => run(() => adminApi.updateCategory(category.id, { name: category.name, slug: category.slug, description: category.description, sort_order: category.sort_order, is_active: category.is_active, requires_review: category.requires_review, ...changes }));
@@ -68,11 +80,15 @@ export default function AdminPage() {
 
       <AdminSection title="用户与信任">
         <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr><Th>用户</Th><Th>角色/状态</Th><Th>等级</Th><Th>信任分</Th><Th>有效阅读</Th><Th>操作</Th></tr></thead><tbody>{users.map((item) => <tr key={item.id} className="border-t"><Td>{item.username}<div className="text-xs text-[var(--text-muted)]">{item.email}</div></Td><Td>{item.role} / {item.status}</Td><Td>L{item.unlock_level}</Td><Td>{item.trust_score}</Td><Td>{item.verified_read_seconds}s</Td><Td>{item.id !== user.id && <button disabled={busy} onClick={() => void run(() => adminApi.setUserStatus(item.id, item.status === 'active' ? 'suspended' : 'active'))} className="underline">{item.status === 'active' ? '停用' : '恢复'}</button>}</Td></tr>)}</tbody></table></div>
+        <div className="mt-4"><Pagination page={userPage} pageSize={PAGE_SIZE} total={userTotal} onPageChange={setUserPage} itemLabel="个用户" disabled={busy} /></div>
         <h3 className="mt-6 font-semibold">最近信任流水</h3><div className="mt-2 space-y-2">{logs.slice(0, 20).map((log) => <div key={log.id} className="rounded bg-stone-50 p-2"><strong>{log.username}</strong> <span className={log.score_delta >= 0 ? 'text-emerald-700' : 'text-red-700'}>{log.score_delta >= 0 ? '+' : ''}{log.score_delta}</span> · {log.event_type}<span className="ml-2 text-xs text-[var(--text-muted)]">{log.reason}</span></div>)}</div>
+        <div className="mt-4"><Pagination page={logPage} pageSize={PAGE_SIZE} total={logTotal} onPageChange={setLogPage} itemLabel="条信任流水" disabled={busy} /></div>
       </AdminSection>
 
       <AdminSection title="内容状态与可见性">
+        <div className="mb-4 flex gap-2"><button onClick={() => { setContentType('topic'); setContentPage(1); }} className={`rounded px-3 py-1.5 ${contentType === 'topic' ? 'bg-stone-800 text-white' : 'bg-stone-100'}`}>主题</button><button onClick={() => { setContentType('post'); setContentPage(1); }} className={`rounded px-3 py-1.5 ${contentType === 'post' ? 'bg-stone-800 text-white' : 'bg-stone-100'}`}>回复</button></div>
         <div className="space-y-2">{contents.map((item) => <div key={`${item.type}-${item.id}`} className="flex items-center justify-between gap-4 rounded border p-3"><div><strong>{item.type === 'topic' ? '主题' : '回复'} · {item.title}</strong><p className="mt-1 line-clamp-1 text-xs text-[var(--text-muted)]">{item.author_name} · {item.status} · {item.excerpt}</p></div>{['published', 'hidden'].includes(item.status) && <button disabled={busy} onClick={() => void run(() => adminApi.setContentVisibility(item.type, item.id, item.status !== 'hidden'))} className="shrink-0 underline">{item.status === 'hidden' ? '恢复' : '隐藏'}</button>}</div>)}</div>
+        <div className="mt-4"><Pagination page={contentPage} pageSize={PAGE_SIZE} total={contentTotal} onPageChange={setContentPage} itemLabel={contentType === 'topic' ? '个主题' : '条回复'} disabled={busy} /></div>
       </AdminSection>
 
       <AdminSection title="分类管理">
@@ -82,6 +98,7 @@ export default function AdminPage() {
 
       <AdminSection title="LLM 作业与失败重试">
         <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr><Th>类型</Th><Th>状态</Th><Th>模型</Th><Th>延迟</Th><Th>Token</Th><Th>错误/操作</Th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id} className="border-t"><Td>{job.job_type}</Td><Td>{job.status}</Td><Td>{job.model}</Td><Td>{job.latency_ms}ms</Td><Td>{job.prompt_tokens + job.completion_tokens}</Td><Td><span className="text-xs text-red-700">{job.error_message}</span>{job.status === 'failed' && <button disabled={busy} onClick={() => void run(() => adminApi.retryLLMJob(job.id))} className="ml-2 underline">安全重试</button>}</Td></tr>)}</tbody></table></div>
+        <div className="mt-4"><Pagination page={jobPage} pageSize={PAGE_SIZE} total={jobTotal} onPageChange={setJobPage} itemLabel="个 LLM 作业" disabled={busy} /></div>
       </AdminSection>
     </div>
   );
