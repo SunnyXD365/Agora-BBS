@@ -6,10 +6,14 @@ import (
 )
 
 type Config struct {
-	Port           string
-	DBDSN          string
-	JWTSecret      string
-	JWTExpireHours int
+	Port              string
+	DBDSN             string
+	JWTSecret         string
+	JWTExpireHours    int
+	AppEnv            string
+	RedisAddr         string
+	TemporalHost      string
+	TemporalTaskQueue string
 }
 
 // 从环境变量加载配置，提供默认备选项
@@ -20,10 +24,14 @@ func LoadConfig() *Config {
 	expireHours, _ := strconv.Atoi(getEnv("JWT_EXPIRE_HOURS", "72"))
 
 	return &Config{
-		Port:           port,
-		DBDSN:          dbDSN,
-		JWTSecret:      jwtSecret,
-		JWTExpireHours: expireHours,
+		Port:              port,
+		DBDSN:             dbDSN,
+		JWTSecret:         jwtSecret,
+		JWTExpireHours:    expireHours,
+		AppEnv:            getEnv("APP_ENV", "development"),
+		RedisAddr:         getEnv("REDIS_ADDR", "agora-redis:6379"),
+		TemporalHost:      getEnv("TEMPORAL_HOST", "agora-temporal:7233"),
+		TemporalTaskQueue: getEnv("TEMPORAL_TASK_QUEUE", "agora-governance"),
 	}
 }
 
