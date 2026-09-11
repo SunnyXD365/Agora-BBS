@@ -23,6 +23,7 @@ export default function Navbar() {
         </div>
 
         <nav className="flex items-center gap-4">
+          <Link href="/guide" className="text-sm text-gray-600 hover:text-gray-900">使用说明</Link>
           {isLoading ? (
             <div className="h-8 w-24 animate-pulse rounded bg-gray-200" />
           ) : user ? (

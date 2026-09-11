@@ -6,6 +6,7 @@ import { getErrorMessage, topicApi } from '@/services';
 import { useAuth } from '@/context/AuthContext';
 import TopicCard from '@/components/TopicCard';
 import CreateTopicModal from '@/components/CreateTopicModal';
+import UsageGuideCard from '@/components/UsageGuideCard';
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -48,9 +49,14 @@ export default function HomePage() {
   }, [selectedCategory, refreshKey]);
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[210px_minmax(0,1fr)_220px]">
+      {/* 左侧：新用户导航 */}
+      <div className="order-2 lg:order-1">
+        <UsageGuideCard />
+      </div>
+
       {/* 主栏：板块过滤与帖子列表 */}
-      <div className="lg:col-span-3 space-y-4">
+      <div className="order-1 min-w-0 space-y-4 lg:order-2">
         {/* 板块 Selector 标栏 */}
         <div className="flex items-center justify-between rounded-lg border bg-white p-3 shadow-sm">
           <div className="flex flex-wrap gap-2">
@@ -119,7 +125,7 @@ export default function HomePage() {
       </div>
 
       {/* 侧边栏：社区信息 */}
-      <div className="space-y-4">
+      <div className="order-3 hidden space-y-4 xl:block">
         <div className="rounded-lg border bg-white p-4 shadow-sm">
           <h3 className="font-semibold text-gray-900 text-sm">关于 Agora BBS</h3>
           <p className="mt-2 text-xs text-gray-500 leading-relaxed">

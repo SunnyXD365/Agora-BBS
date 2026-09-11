@@ -10,6 +10,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (token: string, user: UserProfile) => void;
   logout: () => void;
+  refreshUser: () => Promise<UserProfile | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,6 +27,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setIsLoading(false);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const storedToken = localStorage.getItem('token');
+    if (!storedToken) {
+      setToken(null);
+      setUser(null);
+      return null;
+    }
+    const res = await authApi.getMe();
+    if (res.code !== 0) return null;
+    setToken(storedToken);
+    setUser(res.data);
+    return res.data;
+  }, []);
+
   // 在挂载后读取浏览器存储，避免服务端渲染与首次 hydration 的状态不一致。
   useEffect(() => {
     let cancelled = false;
@@ -40,14 +55,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       try {
-        const res = await authApi.getMe();
-        if (cancelled) return;
-        if (res.code === 0) {
-          setToken(storedToken);
-          setUser(res.data);
-        } else {
-          logout();
-        }
+        const restored = await refreshUser();
+        if (!cancelled && !restored) logout();
       } catch {
         if (!cancelled) logout();
       } finally {
@@ -56,7 +65,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
     void restoreSession();
     return () => { cancelled = true; };
-  }, [logout]);
+  }, [logout, refreshUser]);
 
   const login = (newToken: string, newUser: UserProfile) => {
     localStorage.setItem('token', newToken);
@@ -66,7 +75,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

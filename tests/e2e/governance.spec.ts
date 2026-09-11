@@ -12,14 +12,26 @@ test('registration, cooling, feedback, blind review and administration', async (
   };
   const authHeaders = (token: string) => ({ Authorization: `Bearer ${token}` });
 
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: '第一次来到 Agora' })).toBeVisible();
+  await page.getByRole('link', { name: '查看完整论坛使用手册' }).click();
+  await expect(page.getByRole('heading', { name: '论坛使用手册' })).toBeVisible();
+
   const suffix = Date.now();
   const registered = await request.post(`${api}/auth/register`, { data: { username: `e2e_${suffix}`, email: `e2e_${suffix}@example.test`, password: 'e2e-password' } });
   expect(registered.ok()).toBeTruthy();
   const candidate = (await registered.json() as Envelope<Auth>).data;
   expect(candidate.user.unlock_level).toBe(0);
 
-  const onboarding = await request.put(`${api}/users/me/onboarding`, { headers: authHeaders(candidate.token), data: { statement: '我愿意基于事实参与讨论，说明依据，尊重不同经验，并在不确定时明确表达边界。', background_tag: 'education' } });
-  expect(onboarding.ok()).toBeTruthy();
+  await page.goto('/login');
+  await page.evaluate(({ token }) => localStorage.setItem('token', token), candidate);
+  await page.goto('/profile');
+  await expect(page.getByRole('heading', { name: '如何获得权限' })).toBeVisible();
+  await page.getByPlaceholder('背景标签，例如：在校学生 / 软件工程').fill('education');
+  await page.getByPlaceholder('介绍你希望如何参与社区讨论…').fill('我愿意基于事实参与讨论，说明依据，尊重不同经验，并在不确定时明确表达边界。');
+  await page.getByRole('button', { name: '提交自述' }).click();
+  await expect(page.getByText('自述已提交，成长状态已刷新。')).toBeVisible();
+  await expect(page.getByText('匿名评审进行中')).toBeVisible();
 
   const topicsResponse = await request.get(`${api}/topics?page_size=20`);
   const topics = (await topicsResponse.json()).data.items;
