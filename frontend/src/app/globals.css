@@ -1,43 +1,58 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #e5e5e5;
-  --card-bg: #141414;
-  --card-border: #2a2a2a;
-  --muted-text: #9ca3af;
-  --accent: #6b7280;
-  --accent-hover: #9ca3af;
+  /* 纸质基调配色 (Sepia & Warm Parchment) */
+  --bg-paper: #f7f4ed;          /* 纸质主背景：暖米黄/浅羊皮纸色 */
+  --bg-card: #fcfbf7;           /* 卡片/框体：稍微偏白的亮暖纸色 */
+  --text-main: #2b2825;         /* 正文字体：浓墨黑/深褐黑 (比纯黑更护眼且有印刷感) */
+  --text-muted: #736c63;        /* 次要字体：褪色墨汁/浅褐色 */
+  --border-paper: #e4ded0;      /* 纸质装订线：暖灰褐线 */
+  --accent-ink: #8c3222;        /* 强调色：复古朱红/印章红 */
+  --accent-ink-hover: #6f2619;  /* 强调色 Hover */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
+/* 基础重置与纸质视觉表现 */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-paper);
+  color: var(--text-main);
+  /* 选用 serif 字体（如 Georgia）来极大增强报刊/书籍排版质感 */
+  font-family: Georgia, Cambria, "Times New Roman", Times, "Songti SC", "Noto Serif SC", serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 自定义滚动条 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* 自定义纸质质感全局辅助类 */
+@layer utilities {
+  /* 纸质卡片：取代默认白底重阴影，改用细腻边框与柔和纸底 */
+  .paper-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-paper);
+    box-shadow: 0 1px 3px rgba(43, 40, 37, 0.04);
+  }
+
+  /* 报刊式分界线 */
+  .paper-divider {
+    border-color: var(--border-paper);
+  }
+
+  /* 印章/墨水风格按钮 */
+  .paper-btn-primary {
+    background-color: var(--accent-ink);
+    color: #fcfbf7;
+    transition: background-color 0.2s ease;
+  }
+  .paper-btn-primary:hover {
+    background-color: var(--accent-ink-hover);
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: #1a1a1a;
+/* 输入框与交互组件纸质风格适配 */
+input, textarea, select {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-paper) !important;
+  color: var(--text-main) !important;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #3a3a3a;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #4a4a4a;
+input:focus, textarea:focus, select:focus {
+  outline: 1px solid var(--accent-ink) !important;
+  border-color: var(--accent-ink) !important;
 }

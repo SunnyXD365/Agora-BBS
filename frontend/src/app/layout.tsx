@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import { AuthProvider } from '@/context/AuthContext';
-import Header from '@/components/Header';
+import Navbar from '@/components/Navbar';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Agora BBS',
-  description: '基于 Go + Next.js + Temporal 的现代论坛系统',
+  title: 'Agora BBS - 高并发去中心化社区',
+  description: '基于 Go + Next.js 构建的高性能论坛',
 };
 
 export default function RootLayout({
@@ -15,10 +15,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body className="min-h-screen antialiased">
+      <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">
         <AuthProvider>
-          <Header />
-          <main className="max-w-5xl mx-auto px-4 py-6">{children}</main>
+          <Navbar />
+          <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+            {children}
+          </main>
         </AuthProvider>
       </body>
     </html>

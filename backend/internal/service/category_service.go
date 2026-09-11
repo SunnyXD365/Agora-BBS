@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
-	"Agora-BBS/internal/dao"
-	"Agora-BBS/internal/model"
+	"agora-backend/internal/dao"
+	"agora-backend/internal/model"
 )
 
 type CategoryService struct {
@@ -15,24 +15,7 @@ func NewCategoryService(categoryDAO *dao.CategoryDAO) *CategoryService {
 	return &CategoryService{categoryDAO: categoryDAO}
 }
 
+// ListCategories 获取所有板块列表
 func (s *CategoryService) ListCategories(ctx context.Context) ([]*model.Category, error) {
-	return s.categoryDAO.ListAll(ctx)
-}
-
-func (s *CategoryService) CreateCategory(ctx context.Context, req *model.CreateCategoryReq) (*model.Category, error) {
-	c := &model.Category{
-		Name:        req.Name,
-		Slug:        req.Slug,
-		Description: req.Description,
-		ParentID:    req.ParentID,
-		SortOrder:   req.SortOrder,
-	}
-	if err := s.categoryDAO.Create(ctx, c); err != nil {
-		return nil, err
-	}
-	return c, nil
-}
-
-func CategoryServiceFactory(categoryDAO *dao.CategoryDAO) *CategoryService {
-	return &CategoryService{categoryDAO: categoryDAO}
+	return s.categoryDAO.ListCategories(ctx)
 }

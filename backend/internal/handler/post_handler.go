@@ -2,51 +2,62 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
-
-	"Agora-BBS/internal/model"
-	"Agora-BBS/internal/pkg/response"
-	"Agora-BBS/internal/service"
+	"agora-backend/internal/model"
+	"agora-backend/internal/pkg/response"
+	"agora-backend/internal/service"
 )
 
 type PostHandler struct {
 	postService *service.PostService
 }
 
-func NewPostHandler(s *service.PostService) *PostHandler {
-	return &PostHandler{postService: s}
+func NewPostHandler(postService *service.PostService) *PostHandler {
+	return &PostHandler{postService: postService}
 }
 
-func (h *PostHandler) Create(c *gin.Context) {
-	userIDVal, _ := c.Get("current_user_id")
-	userID := userIDVal.(int64)
+func (h *PostHandler) CreatePost(c *gin.Context) {
+	topicIDStr := c.Param("id")
+	topicID, err := strconv.ParseInt(topicIDStr, 10, 64)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, 40001, "invalid topic id")
+		return
+	}
 
 	var req model.CreatePostReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, 40001, err.Error())
+		response.Error(c, http.StatusBadRequest, 40002, "invalid request body")
 		return
 	}
 
-	post, err := h.postService.CreatePost(c.Request.Context(), userID, &req)
+	req.TopicID = topicID
+	userID := c.GetInt64("userID")
+
+	// 这里对齐 Service 的 (ctx, userID, &req) 签名
+	postID, err := h.postService.CreatePost(c.Request.Context(), userID, &req)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, 40002, err.Error())
+		response.Error(c, http.StatusInternalServerError, 50002, err.Error())
 		return
 	}
 
-	response.Success(c, post)
+	response.Success(c, gin.H{"post_id": postID})
 }
 
-func (h *PostHandler) List(c *gin.Context) {
-	var req model.PostListReq
-	if err := c.ShouldBindQuery(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, 40001, err.Error())
+func (h *PostHandler) ListPosts(c *gin.Context) {
+	topicID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, 40001, "invalid topic id")
 		return
 	}
 
-	posts, err := h.postService.ListPosts(c.Request.Context(), &req)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	posts, err := h.postService.ListPosts(c.Request.Context(), topicID, page, pageSize)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, 50000, err.Error())
+		response.Error(c, http.StatusInternalServerError, 50001, "failed to fetch posts")
 		return
 	}
 

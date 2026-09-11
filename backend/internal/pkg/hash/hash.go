@@ -1,15 +1,17 @@
-package password
+package hash
 
-import "golang.org/x/crypto/bcrypt"
+import (
+	"golang.org/x/crypto/bcrypt"
+)
 
-// 生成 Bcrypt 密码哈希
+// HashPassword 将明文密码转为 Bcrypt 哈希值
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(bytes), err
 }
 
-// 比对明文密码与哈希
-func CheckPassword(password, hash string) bool {
+// CheckPasswordHash 验证明文密码与哈希值是否匹配
+func CheckPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
 }

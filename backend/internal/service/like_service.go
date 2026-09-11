@@ -4,66 +4,44 @@ import (
 	"context"
 	"errors"
 
-	"Agora-BBS/internal/dao"
-	"Agora-BBS/internal/model"
+	"agora-backend/internal/dao"
+	"agora-backend/internal/model"
 )
 
 type LikeService struct {
-	likeDAO  *dao.LikeDAO
-	topicDAO *dao.TopicDAO
-	postDAO  *dao.PostDAO
+	likeDAO *dao.LikeDAO
 }
 
-func NewLikeService(likeDAO *dao.LikeDAO, topicDAO *dao.TopicDAO, postDAO *dao.PostDAO) *LikeService {
-	return &LikeService{
-		likeDAO:  likeDAO,
-		topicDAO: topicDAO,
-		postDAO:  postDAO,
-	}
+func NewLikeService(likeDAO *dao.LikeDAO) *LikeService {
+	return &LikeService{likeDAO: likeDAO}
 }
 
-func (s *LikeService) ToggleLike(ctx context.Context, userID int64, req *model.ToggleLikeReq) (*model.ToggleLikeResp, error) {
-	// 1. 检查是否已经点过赞
-	existingLike, err := s.likeDAO.GetLike(ctx, userID, req.TargetType, req.TargetID)
-	if err != nil {
-		return nil, err
+// Like 对主题帖或回复点赞
+func (s *LikeService) Like(ctx context.Context, userID int64, req *model.ToggleLikeReq) error {
+	if req.TargetType != "topic" && req.TargetType != "post" {
+		return errors.New("invalid target_type, must be 'topic' or 'post'")
 	}
 
-	isLiked := false
-	delta := 0
-
-	if existingLike == nil {
-		// 未点赞 -> 添加点赞
-		if err := s.likeDAO.CreateLike(ctx, userID, req.TargetType, req.TargetID); err != nil {
-			return nil, err
-		}
-		isLiked = true
-		delta = 1
-	} else {
-		// 已点赞 -> 取消点赞
-		if err := s.likeDAO.DeleteLike(ctx, userID, req.TargetType, req.TargetID); err != nil {
-			return nil, err
-		}
-		isLiked = false
-		delta = -1
+	like := &model.Like{
+		UserID:     userID,
+		TargetType: req.TargetType,
+		TargetID:   req.TargetID,
 	}
 
-	// 2. 更新对应目标的点赞数
-	var newCount int
-	if req.TargetType == "topic" {
-		newCount, err = s.topicDAO.UpdateLikeCount(ctx, req.TargetID, delta)
-	} else if req.TargetType == "post" {
-		newCount, err = s.postDAO.UpdateLikeCount(ctx, req.TargetID, delta)
-	} else {
-		return nil, errors.New("invalid target type")
+	return s.likeDAO.CreateLike(ctx, like)
+}
+
+// Unlike 取消点赞
+func (s *LikeService) Unlike(ctx context.Context, userID int64, req *model.ToggleLikeReq) error {
+	if req.TargetType != "topic" && req.TargetType != "post" {
+		return errors.New("invalid target_type, must be 'topic' or 'post'")
 	}
 
-	if err != nil {
-		return nil, err
+	like := &model.Like{
+		UserID:     userID,
+		TargetType: req.TargetType,
+		TargetID:   req.TargetID,
 	}
 
-	return &model.ToggleLikeResp{
-		IsLiked:   isLiked,
-		LikeCount: newCount,
-	}, nil
+	return s.likeDAO.DeleteLike(ctx, like)
 }

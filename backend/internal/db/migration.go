@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"Agora-BBS/migrations"
+	"agora-backend/migrations"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
