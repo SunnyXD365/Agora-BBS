@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"agora-backend/internal/model"
-	"agora-backend/internal/service"
 	"agora-backend/internal/pkg/response"
+	"agora-backend/internal/service"
+	"github.com/gin-gonic/gin"
 )
 
 type TopicHandler struct {
@@ -64,11 +64,11 @@ func (h *TopicHandler) ListTopics(c *gin.Context) {
 		PageSize:   pageSize,
 	}
 
-	topics, err := h.topicService.ListTopics(c.Request.Context(), &req)
+	pageData, err := h.topicService.ListTopics(c.Request.Context(), &req)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, 50003, "failed to fetch topics")
 		return
 	}
 
-	response.Success(c, topics)
+	response.Success(c, pageData)
 }

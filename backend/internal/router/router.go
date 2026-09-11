@@ -14,10 +14,12 @@ type Handlers struct {
 	TopicHandler    *handler.TopicHandler
 	PostHandler     *handler.PostHandler
 	LikeHandler     *handler.LikeHandler
+	BookmarkHandler *handler.BookmarkHandler
 }
 
 func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
 	r := gin.Default()
+	r.Use(middleware.RequestID())
 
 	v1 := r.Group("/api/v1")
 	{
@@ -50,6 +52,9 @@ func SetupRouter(cfg *config.Config, h *Handlers) *gin.Engine {
 
 			protected.POST("/topics", h.TopicHandler.CreateTopic)
 			protected.POST("/topics/:id/posts", h.PostHandler.CreatePost)
+			protected.GET("/bookmarks", h.BookmarkHandler.List)
+			protected.PUT("/bookmarks/:topicId", h.BookmarkHandler.Create)
+			protected.DELETE("/bookmarks/:topicId", h.BookmarkHandler.Delete)
 
 			protected.POST("/likes", h.LikeHandler.Like)
 			protected.DELETE("/likes", h.LikeHandler.Unlike)

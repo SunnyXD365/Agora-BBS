@@ -3,6 +3,14 @@ export interface ApiResponse<T> {
   code: number;
   msg: string;
   data: T;
+  request_id: string;
+}
+
+export interface PageData<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 // 用户类型
@@ -12,7 +20,7 @@ export interface UserProfile {
   email: string;
   avatar: string;
   role: string;
-  trust_score: number;
+  status: string;
   unlock_level: number;
   created_at: string;
 }
@@ -29,6 +37,14 @@ export interface Category {
   slug: string;
   description: string;
   sort_order: number;
+  is_active: boolean;
+  requires_review: boolean;
+}
+
+export interface StructuredContent {
+  claim: string;
+  evidence: string;
+  uncertainty: string;
 }
 
 // 主题帖类型
@@ -39,6 +55,9 @@ export interface Topic {
   author_name: string;
   title: string;
   content: string;
+  structured_content: StructuredContent;
+  status: string;
+  cooling_ends_at?: string;
   view_count: number;
   post_count: number;
   like_count: number;
@@ -54,6 +73,17 @@ export interface Post {
   author_name: string;
   parent_id: number | null;
   content: string;
+  post_type: 'debate' | 'evidence' | 'experience' | 'thanks';
+  status: string;
+  cooling_ends_at?: string;
   like_count: number;
   created_at: string;
+}
+
+export interface Bookmark {
+  id: number;
+  user_id: number;
+  topic_id: number;
+  created_at: string;
+  topic: Topic;
 }

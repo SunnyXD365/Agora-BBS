@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"agora-backend/internal/pkg/jwt"
 	"agora-backend/internal/pkg/response"
+	"github.com/gin-gonic/gin"
 )
 
 func JWTAuth(jwtSecret string) gin.HandlerFunc {

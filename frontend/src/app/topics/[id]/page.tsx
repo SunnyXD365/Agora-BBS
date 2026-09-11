@@ -1,212 +1,134 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Post, Topic } from '@/types/api';
-import { likeApi, postApi, topicApi } from '@/services';
+import { bookmarkApi, getErrorMessage, postApi, topicApi } from '@/services';
 import { useAuth } from '@/context/AuthContext';
+
+type PostNode = Post & { children: PostNode[] };
+
+const postTypeLabels: Record<Post['post_type'], string> = {
+  debate: '质疑与辩论', evidence: '补充论据', experience: '个人经历', thanks: '单纯感谢',
+};
+
+function toPostTree(posts: Post[]): PostNode[] {
+  const nodes = new Map<number, PostNode>();
+  posts.forEach((post) => nodes.set(post.id, { ...post, children: [] }));
+  const roots: PostNode[] = [];
+  nodes.forEach((node) => {
+    const parent = node.parent_id ? nodes.get(node.parent_id) : undefined;
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  });
+  return roots;
+}
+
+function PostBranch({ node, depth, onReply }: { node: PostNode; depth: number; onReply: (post: Post) => void }) {
+  return (
+    <div className={depth ? 'ml-4 border-l border-[var(--border-paper)] pl-4' : ''}>
+      <article className="paper-card mb-3 rounded-xl p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
+          <div className="flex items-center gap-2"><strong className="text-gray-800">{node.author_name}</strong><span className="rounded bg-stone-100 px-2 py-0.5">{postTypeLabels[node.post_type]}</span></div>
+          <time>{new Date(node.created_at).toLocaleString()}</time>
+        </div>
+        <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-gray-800">{node.content}</p>
+        <button onClick={() => onReply(node)} className="mt-3 text-xs font-semibold text-[var(--accent-ink)] hover:underline">回复这条发言</button>
+      </article>
+      {node.children.map((child) => <PostBranch key={child.id} node={child} depth={depth + 1} onReply={onReply} />)}
+    </div>
+  );
+}
 
 export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
-  
   const topicId = Number(params.id);
-
   const [topic, setTopic] = useState<Topic | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // 互动与回复状态
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
+  const [error, setError] = useState('');
+  const [bookmarked, setBookmarked] = useState(false);
   const [replyContent, setReplyContent] = useState('');
+  const [replyType, setReplyType] = useState<Post['post_type']>('experience');
+  const [replyTo, setReplyTo] = useState<Post | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  // 加载帖子详情与楼层列表
-  const fetchData = async () => {
-    if (!topicId) return;
-    setLoading(true);
-
-    try {
-      const [topicRes, postsRes] = await Promise.all([
-        topicApi.getTopicDetail(topicId),
-        postApi.getPosts(topicId, { page: 1, page_size: 50 }),
-      ]);
-
-      if (topicRes.code === 0 && topicRes.data) {
-        setTopic(topicRes.data);
-        setLikeCount(topicRes.data.like_count);
-      }
-      if (postsRes.code === 0) {
-        setPosts(postsRes.data || []);
-      }
-    } catch (err) {
-      console.error('Failed to load topic detail:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const postTree = useMemo(() => toPostTree(posts), [posts]);
 
   useEffect(() => {
-    fetchData();
+    if (!topicId) return;
+    let cancelled = false;
+    Promise.all([topicApi.getTopicDetail(topicId), postApi.getPosts(topicId, { page: 1, page_size: 50 })])
+      .then(([topicRes, postsRes]) => {
+        if (cancelled) return;
+        if (topicRes.code === 0) setTopic(topicRes.data);
+        if (postsRes.code === 0) setPosts(postsRes.data.items);
+      })
+      .catch((err: unknown) => { if (!cancelled) setError(getErrorMessage(err, '主题加载失败')); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [topicId]);
 
-  // 点赞/取消点赞主题帖
-  const handleToggleTopicLike = async () => {
-    if (!user) {
-      alert('请先登录后再点赞');
-      router.push('/login');
-      return;
-    }
-
-    const nextState = !isLiked;
-    setIsLiked(nextState);
-    setLikeCount((prev) => (nextState ? prev + 1 : prev - 1));
-
-    try {
-      await likeApi.toggleLike('topic', topicId, nextState);
-    } catch (err) {
-      // 回滚状态
-      setIsLiked(!nextState);
-      setLikeCount((prev) => (nextState ? prev - 1 : prev + 1));
-    }
+  const refreshPosts = async () => {
+    const result = await postApi.getPosts(topicId, { page: 1, page_size: 50 });
+    if (result.code === 0) setPosts(result.data.items);
   };
 
-  // 发表回复
-  const handleSubmitReply = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) {
-      alert('请先登录后再回复');
-      router.push('/login');
-      return;
-    }
+  const handleBookmark = async () => {
+    if (!user) { router.push('/login'); return; }
+    try {
+      if (bookmarked) await bookmarkApi.remove(topicId); else await bookmarkApi.create(topicId);
+      setBookmarked(!bookmarked);
+    } catch (err: unknown) { setError(getErrorMessage(err, '收藏操作失败')); }
+  };
 
+  const handleSubmitReply = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user) { router.push('/login'); return; }
     if (!replyContent.trim()) return;
-
     setSubmitting(true);
+    setError('');
     try {
-      const res = await postApi.createPost(topicId, { content: replyContent });
-      if (res.code === 0) {
-        setReplyContent('');
-        // 重新拉取回复列表并更新帖子回复计数
-        const postsRes = await postApi.getPosts(topicId, { page: 1, page_size: 50 });
-        if (postsRes.code === 0) setPosts(postsRes.data || []);
-        if (topic) setTopic({ ...topic, post_count: topic.post_count + 1 });
+      const result = await postApi.createPost(topicId, { content: replyContent, parent_id: replyTo?.id, post_type: replyType });
+      if (result.code === 0) {
+        setReplyContent(''); setReplyTo(null); await refreshPosts();
+        setTopic((current) => current ? { ...current, post_count: current.post_count + 1 } : current);
       }
-    } catch (err: any) {
-      alert(err.msg || '回复发表失败');
-    } finally {
-      setSubmitting(false);
-    }
+    } catch (err: unknown) { setError(getErrorMessage(err, '回复发表失败')); }
+    finally { setSubmitting(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-4xl space-y-4">
-        <div className="h-48 animate-pulse rounded-xl bg-gray-200" />
-        <div className="h-24 animate-pulse rounded-xl bg-gray-200" />
-      </div>
-    );
-  }
-
-  if (!topic) {
-    return (
-      <div className="rounded-xl border bg-white p-12 text-center text-gray-500">
-        该主题帖不存在或已被删除。
-      </div>
-    );
-  }
+  if (loading) return <div className="mx-auto h-48 max-w-4xl animate-pulse rounded-xl bg-stone-200" />;
+  if (!topic) return <div className="paper-card rounded-xl p-12 text-center">{error || '该主题不存在或不可见。'}</div>;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      {/* 帖子主卡片 */}
-      <article className="rounded-xl border bg-white p-6 shadow-sm">
-        <header className="border-b pb-4">
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      <article className="paper-card rounded-xl p-6">
+        <header className="border-b border-[var(--border-paper)] pb-4">
           <h1 className="text-2xl font-bold text-gray-900">{topic.title}</h1>
-          <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
-            <div className="flex items-center gap-3">
-              <span className="font-semibold text-gray-700">{topic.author_name}</span>
-              <span>·</span>
-              <span>{new Date(topic.created_at).toLocaleString()}</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span>👀 {topic.view_count} 浏览</span>
-              <span>💬 {topic.post_count} 回复</span>
-            </div>
-          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]"><span>{topic.author_name} · {new Date(topic.created_at).toLocaleString()}</span><span>浏览 {topic.view_count} · 回复 {topic.post_count}</span></div>
         </header>
-
-        {/* 正文内容 */}
-        <div className="py-6 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
-          {topic.content}
+        <div className="space-y-5 py-6 text-sm leading-7">
+          <section><h2 className="font-bold text-[var(--accent-ink)]">我的核心观点</h2><p className="mt-1 whitespace-pre-wrap">{topic.structured_content?.claim || topic.content}</p></section>
+          {topic.structured_content?.evidence && <section><h2 className="font-bold">支持依据</h2><p className="mt-1 whitespace-pre-wrap">{topic.structured_content.evidence}</p></section>}
+          {topic.structured_content?.uncertainty && <section><h2 className="font-bold">仍不确定的地方</h2><p className="mt-1 whitespace-pre-wrap">{topic.structured_content.uncertainty}</p></section>}
         </div>
-
-        {/* 交互操作区 */}
-        <footer className="flex items-center justify-end border-t pt-4">
-          <button
-            onClick={handleToggleTopicLike}
-            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
-              isLiked
-                ? 'bg-red-50 text-red-600 border border-red-200'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {isLiked ? '❤️ 已赞' : '🤍 点赞'} ({likeCount})
-          </button>
-        </footer>
+        <footer className="flex justify-end border-t border-[var(--border-paper)] pt-4"><button onClick={handleBookmark} className="rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-stone-100">{bookmarked ? '已收藏' : '收藏主题'}</button></footer>
       </article>
-
-      {/* 发表回复框 */}
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-bold text-gray-900">发表回复</h3>
+      <section className="paper-card rounded-xl p-6">
+        <h2 className="text-sm font-bold">发表回复</h2>
+        {replyTo && <div className="mt-3 rounded bg-stone-100 p-2 text-xs">正在回复 {replyTo.author_name}<button onClick={() => setReplyTo(null)} className="ml-2 underline">取消</button></div>}
         <form onSubmit={handleSubmitReply} className="mt-3 space-y-3">
-          <textarea
-            rows={3}
-            required
-            value={replyContent}
-            onChange={(e) => setReplyContent(e.target.value)}
-            placeholder={user ? '撰写你的观点...' : '请先登录后再发表回复'}
-            disabled={!user}
-            className="w-full rounded-md border border-gray-300 p-3 text-sm focus:border-blue-500 focus:outline-none disabled:bg-gray-50"
-          />
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={submitting || !user}
-              className="rounded-md bg-blue-600 px-5 py-2 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50 transition-colors"
-            >
-              {submitting ? '提交中...' : '提交回复'}
-            </button>
-          </div>
+          <select value={replyType} onChange={(event) => setReplyType(event.target.value as Post['post_type'])} disabled={!user} className="rounded-md border p-2 text-sm">{Object.entries(postTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <textarea rows={4} required value={replyContent} onChange={(event) => setReplyContent(event.target.value)} disabled={!user} placeholder={user ? '认真写下你的回应…' : '请先登录'} className="w-full rounded-md border p-3 text-sm" />
+          <div className="flex justify-end"><button type="submit" disabled={!user || submitting} className="paper-btn-primary rounded-md px-5 py-2 text-sm disabled:opacity-50">{submitting ? '提交中…' : '提交回复'}</button></div>
         </form>
       </section>
-
-      {/* 楼层回复列表 */}
-      <section className="space-y-3">
-        <h3 className="text-sm font-bold text-gray-900 px-1">
-          全部回复 ({posts.length})
-        </h3>
-        {posts.length === 0 ? (
-          <div className="rounded-xl border bg-white p-8 text-center text-xs text-gray-500">
-            暂无回复，快来发表第一条观点吧！
-          </div>
-        ) : (
-          posts.map((post, idx) => (
-            <div key={post.id} className="rounded-xl border bg-white p-4 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-xs text-gray-500">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-700">{post.author_name}</span>
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">
-                    #{idx + 1} 楼
-                  </span>
-                </div>
-                <span>{new Date(post.created_at).toLocaleString()}</span>
-              </div>
-              <p className="text-sm text-gray-800 leading-normal">{post.content}</p>
-            </div>
-          ))
-        )}
+      <section>
+        <h2 className="mb-3 text-sm font-bold">全部回复（{posts.length}）</h2>
+        {postTree.length === 0 ? <div className="paper-card rounded-xl p-8 text-center text-sm text-[var(--text-muted)]">暂无回复。</div> : postTree.map((node) => <PostBranch key={node.id} node={node} depth={0} onReply={setReplyTo} />)}
       </section>
     </div>
   );

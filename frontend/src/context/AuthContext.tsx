@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { UserProfile } from '@/types/api';
 import { authApi } from '@/services';
 
@@ -16,14 +16,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : localStorage.getItem('token'),
+  );
+  const [isLoading, setIsLoading] = useState(() =>
+    typeof window !== 'undefined' && Boolean(localStorage.getItem('token')),
+  );
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+    setIsLoading(false);
+  }, []);
 
   // 初始化：自动恢复登录态
   useEffect(() => {
-    const savedToken = localStorage.getItem('token');
-    if (savedToken) {
-      setToken(savedToken);
+    if (token) {
       authApi.getMe()
         .then((res) => {
           if (res.code === 0) {
@@ -34,21 +43,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         })
         .catch(() => logout())
         .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
     }
-  }, []);
+  }, [logout, token]);
 
   const login = (newToken: string, newUser: UserProfile) => {
     localStorage.setItem('token', newToken);
     setToken(newToken);
     setUser(newUser);
-  };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
   };
 
   return (

@@ -1,13 +1,16 @@
 package handler
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
+	"agora-backend/internal/dao"
 	"agora-backend/internal/model"
 	"agora-backend/internal/pkg/response"
 	"agora-backend/internal/service"
+	"github.com/gin-gonic/gin"
 )
 
 type PostHandler struct {
@@ -38,6 +41,14 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	// 这里对齐 Service 的 (ctx, userID, &req) 签名
 	postID, err := h.postService.CreatePost(c.Request.Context(), userID, &req)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.Error(c, http.StatusNotFound, 40401, "topic not found")
+			return
+		}
+		if errors.Is(err, dao.ErrInvalidParent) {
+			response.Error(c, http.StatusBadRequest, 40003, err.Error())
+			return
+		}
 		response.Error(c, http.StatusInternalServerError, 50002, err.Error())
 		return
 	}
@@ -55,11 +66,11 @@ func (h *PostHandler) ListPosts(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	posts, err := h.postService.ListPosts(c.Request.Context(), topicID, page, pageSize)
+	pageData, err := h.postService.ListPosts(c.Request.Context(), topicID, page, pageSize)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, 50001, "failed to fetch posts")
 		return
 	}
 
-	response.Success(c, posts)
+	response.Success(c, pageData)
 }

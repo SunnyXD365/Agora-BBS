@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { authApi } from '@/services';
+import { authApi, getErrorMessage } from '@/services';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,8 +28,8 @@ export default function LoginPage() {
       } else {
         setError(res.msg || '登录失败，请检查用户名或密码');
       }
-    } catch (err: any) {
-      setError(err.msg || '网络错误，请稍后再试');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, '网络错误，请稍后再试'));
     } finally {
       setLoading(false);
     }

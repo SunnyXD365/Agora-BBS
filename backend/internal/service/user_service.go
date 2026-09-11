@@ -11,20 +11,25 @@ import (
 )
 
 type UserService struct {
-	userDAO   *dao.UserDAO
-	jwtSecret string
+	userDAO        *dao.UserDAO
+	jwtSecret      string
+	jwtExpireHours int
 }
 
-func NewUserService(userDAO *dao.UserDAO, jwtSecret string) *UserService {
+func NewUserService(userDAO *dao.UserDAO, jwtSecret string, jwtExpireHours int) *UserService {
 	return &UserService{
-		userDAO:   userDAO,
-		jwtSecret: jwtSecret,
+		userDAO:        userDAO,
+		jwtSecret:      jwtSecret,
+		jwtExpireHours: jwtExpireHours,
 	}
 }
 
 func (s *UserService) Register(ctx context.Context, req *model.RegisterReq) (*model.AuthResp, error) {
 	// 1. 业务逻辑校验：检查用户名是否已被占用
-	existingUser, _ := s.userDAO.GetUserByUsername(ctx, req.Username)
+	existingUser, err := s.userDAO.GetUserByUsername(ctx, req.Username)
+	if err != nil {
+		return nil, err
+	}
 	if existingUser != nil {
 		return nil, errors.New("username already exists")
 	}
@@ -46,7 +51,7 @@ func (s *UserService) Register(ctx context.Context, req *model.RegisterReq) (*mo
 	}
 
 	// 4. 颁发 JWT Token (有效期 72 小时)
-	token, err := jwt.GenerateToken(user.ID, s.jwtSecret, 72)
+	token, err := jwt.GenerateToken(user.ID, s.jwtSecret, s.jwtExpireHours)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +65,9 @@ func (s *UserService) Login(ctx context.Context, req *model.LoginReq) (*model.Au
 	if err != nil || user == nil {
 		return nil, errors.New("invalid username or password")
 	}
+	if user.Status != "active" {
+		return nil, errors.New("account is suspended")
+	}
 
 	// 2. 比对密码
 	if !hash.CheckPasswordHash(req.Password, user.PasswordHash) {
@@ -67,7 +75,7 @@ func (s *UserService) Login(ctx context.Context, req *model.LoginReq) (*model.Au
 	}
 
 	// 3. 生成 Token
-	token, err := jwt.GenerateToken(user.ID, s.jwtSecret, 72)
+	token, err := jwt.GenerateToken(user.ID, s.jwtSecret, s.jwtExpireHours)
 	if err != nil {
 		return nil, err
 	}
