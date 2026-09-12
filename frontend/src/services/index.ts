@@ -8,6 +8,7 @@ import {
   AdminUser,
   AuthData,
   LoginData,
+  MyContentItem,
   Bookmark,
   Category,
   CommentCluster,
@@ -22,6 +23,7 @@ import {
   ReviewSubmission,
   ReviewTask,
   StructuredContent,
+  SearchResult,
   Topic,
   UserProfile,
 } from '@/types/api';
@@ -60,6 +62,21 @@ export const topicApi = {
     api.patch<ApiResponse<Topic>, ApiResponse<Topic>>(`/topics/${id}`, data),
   recallCooling: (id: number) =>
     api.delete<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/topics/${id}`),
+  createDraft: (data: { category_id: number; title: string; structured_content: StructuredContent }) =>
+    api.post<ApiResponse<Topic>, ApiResponse<Topic>>('/topics/drafts', data),
+  updateDraft: (id: number, data: { category_id: number; title: string; structured_content: StructuredContent }) =>
+    api.patch<ApiResponse<Topic>, ApiResponse<Topic>>(`/topics/${id}/draft`, data),
+  publishDraft: (id: number) =>
+    api.post<ApiResponse<{ topic_id: number; status: string; cooling_ends_at: string }>, ApiResponse<{ topic_id: number; status: string; cooling_ends_at: string }>>(`/topics/${id}/publish`),
+  deleteDraft: (id: number) =>
+    api.delete<ApiResponse<{ deleted: boolean }>, ApiResponse<{ deleted: boolean }>>(`/topics/${id}/draft`),
+};
+
+export const contentApi = {
+  mine: (params?: { type?: 'topic' | 'post'; status?: string; page?: number; page_size?: number }) =>
+    api.get<ApiResponse<PageData<MyContentItem>>, ApiResponse<PageData<MyContentItem>>>('/users/me/contents', { params }),
+  search: (params: { q: string; type?: 'topic' | 'post'; page?: number; page_size?: number }) =>
+    api.get<ApiResponse<PageData<SearchResult>>, ApiResponse<PageData<SearchResult>>>('/search', { params }),
 };
 
 export const postApi = {

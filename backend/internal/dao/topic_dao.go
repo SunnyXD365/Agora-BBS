@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"agora-backend/internal/model"
 )
@@ -25,6 +26,63 @@ func (d *TopicDAO) CreateTopic(ctx context.Context, t *model.Topic) error {
 	`
 	return d.db.QueryRowContext(ctx, query, t.CategoryID, t.UserID, t.Title, t.Content, t.StructuredContent, t.Status, t.CoolingEndsAt).
 		Scan(&t.ID, &t.ViewCount, &t.PostCount, &t.LikeCount, &t.Status, &t.CoolingEndsAt, &t.CreatedAt, &t.UpdatedAt)
+}
+
+func (d *TopicDAO) CreateDraft(ctx context.Context, t *model.Topic) error {
+	query := `
+		INSERT INTO topics (category_id, user_id, title, content, structured_content, status, cooling_ends_at)
+		SELECT $1, $2, $3, $4, $5, 'draft', NULL
+		WHERE EXISTS (SELECT 1 FROM categories WHERE id = $1 AND is_active = TRUE)
+		RETURNING id, view_count, post_count, like_count, status, cooling_ends_at, created_at, updated_at`
+	return d.db.QueryRowContext(ctx, query, t.CategoryID, t.UserID, t.Title, t.Content, t.StructuredContent).
+		Scan(&t.ID, &t.ViewCount, &t.PostCount, &t.LikeCount, &t.Status, &t.CoolingEndsAt, &t.CreatedAt, &t.UpdatedAt)
+}
+
+func (d *TopicDAO) UpdateDraft(ctx context.Context, t *model.Topic) error {
+	result, err := d.db.ExecContext(ctx, `UPDATE topics SET category_id=$3,title=$4,content=$5,structured_content=$6,updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND user_id=$2 AND status='draft' AND EXISTS(SELECT 1 FROM categories WHERE id=$3 AND is_active=TRUE)`, t.ID, t.UserID, t.CategoryID, t.Title, t.Content, t.StructuredContent)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (d *TopicDAO) GetOwnedDraft(ctx context.Context, id, userID int64) (*model.Topic, error) {
+	topic := &model.Topic{}
+	err := d.db.QueryRowContext(ctx, `SELECT id,category_id,user_id,title,content,structured_content,status,cooling_ends_at,view_count,post_count,like_count,created_at,updated_at FROM topics WHERE id=$1 AND user_id=$2 AND status='draft'`, id, userID).Scan(
+		&topic.ID, &topic.CategoryID, &topic.UserID, &topic.Title, &topic.Content, &topic.StructuredContent, &topic.Status, &topic.CoolingEndsAt, &topic.ViewCount, &topic.PostCount, &topic.LikeCount, &topic.CreatedAt, &topic.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return topic, err
+}
+
+func (d *TopicDAO) PublishDraft(ctx context.Context, id, userID int64, endsAt time.Time) error {
+	result, err := d.db.ExecContext(ctx, `UPDATE topics SET status='cooling',cooling_ends_at=$3,updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND user_id=$2 AND status='draft'`, id, userID, endsAt)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (d *TopicDAO) DeleteDraft(ctx context.Context, id, userID int64) error {
+	result, err := d.db.ExecContext(ctx, `DELETE FROM topics WHERE id=$1 AND user_id=$2 AND status='draft'`, id, userID)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (d *TopicDAO) CategoryRequiresReview(ctx context.Context, categoryID int64) (bool, error) {
@@ -111,7 +169,7 @@ func (d *TopicDAO) GetTopicByID(ctx context.Context, id, viewerID int64) (*model
 		       u.username, COALESCE(u.avatar, '')
 		FROM topics t
 		JOIN users u ON t.user_id = u.id
-		WHERE t.id = $1 AND (t.status = 'published' OR (t.user_id = $2 AND t.status IN ('cooling', 'pending_review', 'rejected')))
+		WHERE t.id = $1 AND (t.status = 'published' OR (t.user_id = $2 AND t.status IN ('draft', 'cooling', 'pending_review', 'rejected')))
 	`
 	t := &model.Topic{}
 	err := d.db.QueryRowContext(ctx, query, id, viewerID).Scan(

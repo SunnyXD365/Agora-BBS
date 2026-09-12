@@ -5,6 +5,7 @@ const sections = [
   ['growth', '成长与权限'],
   ['reading', '有效阅读'],
   ['topics', '发起主题'],
+  ['manage', '内容管理与搜索'],
   ['discussion', '回复与反馈'],
   ['cooling', '冷静期'],
   ['review', '匿名盲审'],
@@ -53,9 +54,14 @@ export default function GuidePage() {
         </Section>
 
         <Section id="topics" title="如何发起一个好主题">
-          <p>L2 用户可以点击首页“发新帖”。主题由三个部分组成：</p>
+          <p>登录用户可以在独立发帖页整理内容并保存草稿；达到 L2 后可以正式提交。主题由三个部分组成：</p>
           <ul className="list-disc space-y-2 pl-5"><li><strong className="text-[var(--text-main)]">观点：</strong>你希望讨论的核心判断。</li><li><strong className="text-[var(--text-main)]">依据：</strong>事实、数据、经历或推理过程。</li><li><strong className="text-[var(--text-main)]">不确定性：</strong>你尚不确定、希望他人补充或可能出错的部分。</li></ul>
-          <p>选择最匹配的分类。高争议分类和重要长文可能在冷静期后进入匿名盲审。</p>
+          <p>选择最匹配的分类。草稿不会公开，可在顶部“我的内容”继续编辑或删除；高争议分类和重要长文可能在冷静期后进入匿名盲审。</p>
+        </Section>
+
+        <Section id="manage" title="管理自己的内容与全站搜索">
+          <p>顶部“我的内容”集中展示你创建的主题与回复，可以按草稿、冷静期、待盲审、已发布等状态筛选。草稿可以继续编辑或删除，其他可见内容可以直接返回主题查看。</p>
+          <p>页面顶部搜索框支持至少 2 个字的模糊搜索，范围包括已发布主题的标题、观点、依据、不确定性以及公开回复。搜索结果可以继续按“主题/回复”筛选；私人草稿、冷静中和隐藏内容不会被搜索到。</p>
         </Section>
 
         <Section id="discussion" title="回复与语境反馈">
@@ -75,12 +81,12 @@ export default function GuidePage() {
         </Section>
 
         <Section id="status" title="常见内容状态">
-          <dl className="grid gap-2 sm:grid-cols-[140px_1fr]"><dt className="font-semibold text-[var(--text-main)]">cooling</dt><dd>冷静期，仅作者可见。</dd><dt className="font-semibold text-[var(--text-main)]">pending_review</dt><dd>等待匿名盲审。</dd><dt className="font-semibold text-[var(--text-main)]">published</dt><dd>已公开发布。</dd><dt className="font-semibold text-[var(--text-main)]">rejected</dt><dd>评审未通过。</dd><dt className="font-semibold text-[var(--text-main)]">recalled</dt><dd>作者在冷静期撤回。</dd><dt className="font-semibold text-[var(--text-main)]">hidden</dt><dd>因治理需要暂时隐藏。</dd></dl>
+          <dl className="grid gap-2 sm:grid-cols-[140px_1fr]"><dt className="font-semibold text-[var(--text-main)]">draft</dt><dd>仅作者可见的草稿，尚未进入发布流程。</dd><dt className="font-semibold text-[var(--text-main)]">cooling</dt><dd>冷静期，仅作者可见。</dd><dt className="font-semibold text-[var(--text-main)]">pending_review</dt><dd>等待匿名盲审。</dd><dt className="font-semibold text-[var(--text-main)]">published</dt><dd>已公开发布。</dd><dt className="font-semibold text-[var(--text-main)]">rejected</dt><dd>评审未通过。</dd><dt className="font-semibold text-[var(--text-main)]">recalled</dt><dd>作者在冷静期撤回。</dd><dt className="font-semibold text-[var(--text-main)]">hidden</dt><dd>因治理需要暂时隐藏。</dd></dl>
         </Section>
 
         <Section id="faq" title="常见问题">
           <div><strong className="text-[var(--text-main)]">为什么不能回复或发帖？</strong><p>先查看成长中心的等级和下一阶段条件；长文还需要完成本主题的阅读要求。</p></div>
-          <div><strong className="text-[var(--text-main)]">为什么提交后首页没有内容？</strong><p>内容正在冷静期或等待盲审，可在原页面查看作者可见状态，不要重复发布。</p></div>
+          <div><strong className="text-[var(--text-main)]">为什么提交后首页没有内容？</strong><p>内容正在冷静期或等待盲审，可以到“我的内容”查看当前状态，不要重复发布。</p></div>
           <div><strong className="text-[var(--text-main)]">自述提交后多久更新？</strong><p>成长中心会立即刷新为评审中，并每 5 秒同步一次；最终时间取决于评审任务完成情况。</p></div>
           <div><strong className="text-[var(--text-main)]">模型会直接决定所有内容吗？</strong><p>不会。常规治理优先由规则和匿名评审完成，模型主要用于抽检、超时兜底与讨论聚类。</p></div>
         </Section>

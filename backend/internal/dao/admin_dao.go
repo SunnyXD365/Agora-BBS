@@ -166,9 +166,12 @@ func (d *AdminDAO) ListContent(ctx context.Context, kind, status string, page, p
 	if kind == "post" {
 		table, titleExpr = "posts", "'回复 #' || c.id::text"
 	}
-	filter, args := "", []any{pageSize, (page - 1) * pageSize}
+	filter, args := " WHERE TRUE", []any{pageSize, (page - 1) * pageSize}
+	if kind == "topic" {
+		filter += " AND c.status <> 'draft'"
+	}
 	if status != "" {
-		filter = " WHERE c.status=$3"
+		filter += " AND c.status=$3"
 		args = append(args, status)
 	}
 	query := fmt.Sprintf(`SELECT c.id,%s,left(c.content,160),u.username,c.status,c.created_at FROM %s c JOIN users u ON u.id=c.user_id%s ORDER BY c.created_at DESC LIMIT $1 OFFSET $2`, titleExpr, table, filter)
@@ -185,10 +188,15 @@ func (d *AdminDAO) ListContent(ctx context.Context, kind, status string, page, p
 		}
 		items = append(items, item)
 	}
-	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s c%s`, table, filter)
+	countFilter := " WHERE TRUE"
+	if kind == "topic" {
+		countFilter += " AND c.status <> 'draft'"
+	}
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s c%s`, table, countFilter)
 	countArgs := []any{}
 	if status != "" {
-		countQuery = fmt.Sprintf(`SELECT COUNT(*) FROM %s c WHERE c.status=$1`, table)
+		countFilter += " AND c.status=$1"
+		countQuery = fmt.Sprintf(`SELECT COUNT(*) FROM %s c%s`, table, countFilter)
 		countArgs = []any{status}
 	}
 	var total int64

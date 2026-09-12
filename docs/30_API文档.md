@@ -26,10 +26,15 @@
 | `POST /auth/login` | 公开 | 统一登录；管理员返回邮箱验证挑战 |
 | `POST /auth/admin/verify-email` | 公开 | 校验管理员邮箱验证码并签发管理 JWT |
 | `GET /users/me` | 登录 | 资料、等级、能力和解锁进度 |
+| `GET /users/me/contents` | 登录 | 当前用户主题/回复及状态分页 |
 | `PUT /users/me/onboarding` | 登录 | 提交社区自述并触发盲审 |
 | `GET /categories` | 公开 | 启用分类 |
 | `GET /topics` | 公开 | 已发布主题分页与分类筛选 |
+| `GET /search` | 公开 | 主题与回复正文模糊搜索 |
 | `POST /topics` | L2 | 创建结构化主题并进入冷静期 |
+| `POST /topics/drafts` | 登录 | 保存新主题草稿 |
+| `PATCH/DELETE /topics/{id}/draft` | 作者 | 更新或删除草稿 |
+| `POST /topics/{id}/publish` | L2/作者 | 将完整草稿提交到冷静期 |
 | `GET /topics/{id}` | 公开/作者 | 详情；作者可见自己的冷静中内容 |
 | `PATCH /topics/{id}` | 作者 | 冷静期编辑并重新计时 |
 | `DELETE /topics/{id}` | 作者 | 冷静期无痕撤回 |
@@ -92,6 +97,10 @@ Content-Type: application/json
 ```
 
 响应包含 `topic_id`、`status=cooling` 和 `cooling_ends_at`。开发默认冷静期 60 秒，生产默认 300 秒。作者可在到期前 PATCH 或 DELETE；普通内容到期发布，长文或高争议分类转为 `pending_review`。
+
+登录用户可以先通过 `POST /topics/drafts` 保存不完整草稿，不要求已达到 L2。草稿状态为 `draft`，仅作者可见；使用 `PATCH /topics/{id}/draft` 继续保存，达到 L2 且标题、核心观点完整后通过 `POST /topics/{id}/publish` 提交。`GET /users/me/contents?type=topic|post&status=draft&page=1&page_size=10` 用于个人内容管理。
+
+公开搜索使用 `GET /search?q=关键词&type=topic|post&page=1&page_size=10`。关键词为 2–100 字，省略 `type` 时同时模糊匹配已发布主题的标题、观点、依据、不确定性及已发布回复；草稿、冷静中和隐藏内容不会进入搜索结果。
 
 回复请求：
 

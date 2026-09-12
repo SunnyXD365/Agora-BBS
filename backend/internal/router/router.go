@@ -23,6 +23,7 @@ type Handlers struct {
 	FeedbackHandler   *handler.FeedbackHandler
 	ReviewHandler     *handler.ReviewHandler
 	AdminHandler      *handler.AdminHandler
+	ContentHandler    *handler.ContentHandler
 }
 
 func SetupRouter(cfg *config.Config, store *cache.Store, database *sql.DB, h *Handlers) *gin.Engine {
@@ -51,6 +52,7 @@ func SetupRouter(cfg *config.Config, store *cache.Store, database *sql.DB, h *Ha
 		v1.GET("/categories", h.CategoryHandler.ListCategories)
 		v1.GET("/governance/policy", h.GovernanceHandler.Policy)
 		v1.GET("/feedbacks/summary", h.FeedbackHandler.Summary)
+		v1.GET("/search", h.ContentHandler.Search)
 
 		topics := v1.Group("/topics")
 		{
@@ -65,12 +67,17 @@ func SetupRouter(cfg *config.Config, store *cache.Store, database *sql.DB, h *Ha
 		protected.Use(middleware.JWTAuth(cfg.JWTSecret))
 		{
 			protected.GET("/users/me", h.UserHandler.GetProfile)
+			protected.GET("/users/me/contents", h.ContentHandler.ListMine)
 			protected.PUT("/users/me/onboarding", h.GovernanceHandler.SaveOnboarding)
 			protected.POST("/reading-sessions", h.GovernanceHandler.StartReading)
 			protected.PATCH("/reading-sessions/:id/heartbeat", h.GovernanceHandler.Heartbeat)
 			protected.POST("/reading-sessions/:id/complete", h.GovernanceHandler.Complete)
 
 			protected.POST("/topics", h.TopicHandler.CreateTopic)
+			protected.POST("/topics/drafts", h.TopicHandler.CreateDraft)
+			protected.PATCH("/topics/:id/draft", h.TopicHandler.UpdateDraft)
+			protected.POST("/topics/:id/publish", h.TopicHandler.PublishDraft)
+			protected.DELETE("/topics/:id/draft", h.TopicHandler.DeleteDraft)
 			protected.PATCH("/topics/:id", h.TopicHandler.UpdateCooling)
 			protected.DELETE("/topics/:id", h.TopicHandler.RecallCooling)
 			protected.POST("/topics/:id/posts", h.PostHandler.CreatePost)

@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Category, GovernancePolicy, Topic } from '@/types/api';
 import { getErrorMessage, governanceApi, topicApi } from '@/services';
 import { useAuth } from '@/context/AuthContext';
 import TopicCard from '@/components/TopicCard';
-import CreateTopicModal from '@/components/CreateTopicModal';
 import UsageGuideCard from '@/components/UsageGuideCard';
 import CommunitySidebar from '@/components/CommunitySidebar';
 import Pagination from '@/components/Pagination';
@@ -20,9 +20,7 @@ export default function HomePage() {
   const [pageSize, setPageSize] = useState(10);
   const [policy, setPolicy] = useState<GovernancePolicy | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState('');
-  const [refreshKey, setRefreshKey] = useState(0);
 
   // 初始化加载板块列表
   useEffect(() => {
@@ -54,7 +52,7 @@ export default function HomePage() {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [page, pageSize, selectedCategory, refreshKey]);
+  }, [page, pageSize, selectedCategory]);
 
   const changePage = (nextPage: number) => {
     setLoading(true); setPage(nextPage);
@@ -98,22 +96,12 @@ export default function HomePage() {
             ))}
           </div>
 
-          <button
-            onClick={() => {
-              if (!user) {
-                alert('请先登录后再发帖');
-                return;
-              }
-              if (!user.capabilities.includes('create_topic')) {
-                alert('发起主题尚未解锁，请先在成长中心查看阅读进度。');
-                return;
-              }
-              setIsModalOpen(true);
-            }}
+          <Link
+            href={user ? '/topics/new' : '/login'}
             className="rounded-md bg-blue-600 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition-colors"
           >
             + 发新帖
-          </button>
+          </Link>
         </div>
 
         {/* 帖子列表渲染 */}
@@ -142,14 +130,6 @@ export default function HomePage() {
       <div className="order-3 hidden xl:block">
         <CommunitySidebar user={user} topics={topics} topicTotal={topicTotal} categoryCount={categories.length} policy={policy} />
       </div>
-
-      {/* 发帖弹窗 */}
-      <CreateTopicModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        categories={categories}
-        onSuccess={() => { setLoading(true); setPage(1); setRefreshKey((key) => key + 1); }}
-      />
     </div>
   );
 }

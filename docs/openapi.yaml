@@ -35,6 +35,13 @@ paths:
       responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' }, '401': { $ref: '#/components/responses/Error' } }
   /users/me:
     get: { tags: [Auth], summary: 当前用户资料与能力, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' }, '401': { $ref: '#/components/responses/Error' } } }
+  /users/me/contents:
+    get:
+      tags: [Forum]
+      summary: 当前用户的主题、回复和草稿分页
+      security: [bearerAuth: []]
+      parameters: [ { in: query, name: type, schema: { type: string, enum: [topic, post], default: topic } }, { in: query, name: status, schema: { type: string, enum: [draft, cooling, pending_review, published, rejected, recalled, hidden] } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ]
+      responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' }, '401': { $ref: '#/components/responses/Error' } }
   /users/me/onboarding:
     put:
       tags: [Review]
@@ -44,6 +51,12 @@ paths:
       responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' } }
   /categories:
     get: { tags: [Forum], summary: 启用分类列表, responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /search:
+    get:
+      tags: [Forum]
+      summary: 已发布主题和回复模糊搜索
+      parameters: [ { in: query, name: q, required: true, schema: { type: string, minLength: 2, maxLength: 100 } }, { in: query, name: type, schema: { type: string, enum: [topic, post] } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ]
+      responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' } }
   /topics:
     get:
       tags: [Forum]
@@ -66,6 +79,25 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateTopicRequest' } } } }
       responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } }
     delete: { tags: [Forum], summary: 冷静期撤回主题, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } } }
+  /topics/drafts:
+    post:
+      tags: [Forum]
+      summary: 保存新主题草稿（允许内容暂不完整）
+      security: [bearerAuth: []]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveTopicDraftRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' }, '401': { $ref: '#/components/responses/Error' } }
+  /topics/{id}/draft:
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    patch:
+      tags: [Forum]
+      summary: 更新自己的主题草稿
+      security: [bearerAuth: []]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SaveTopicDraftRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } }
+    delete: { tags: [Forum], summary: 删除自己的主题草稿, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } } }
+  /topics/{id}/publish:
+    parameters: [ { $ref: '#/components/parameters/ID' } ]
+    post: { tags: [Forum], summary: 将完整草稿提交到冷静期（L2）, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } } }
   /topics/{id}/posts:
     parameters: [ { $ref: '#/components/parameters/ID' } ]
     get: { tags: [Forum], summary: 分层回复分页, parameters: [ { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
@@ -164,6 +196,7 @@ components:
     OnboardingRequest: { type: object, required: [statement, background_tag], properties: { statement: { type: string, minLength: 20, maxLength: 1000 }, background_tag: { type: string, minLength: 2, maxLength: 64 } } }
     StructuredContent: { type: object, required: [claim], properties: { claim: { type: string, minLength: 5 }, evidence: { type: string }, uncertainty: { type: string } } }
     CreateTopicRequest: { type: object, required: [category_id, title, structured_content], properties: { category_id: { type: integer, format: int64 }, title: { type: string, minLength: 3, maxLength: 128 }, structured_content: { $ref: '#/components/schemas/StructuredContent' } } }
+    SaveTopicDraftRequest: { type: object, required: [category_id, structured_content], properties: { category_id: { type: integer, format: int64 }, title: { type: string, maxLength: 128 }, structured_content: { type: object, properties: { claim: { type: string }, evidence: { type: string }, uncertainty: { type: string } } } } }
     UpdateTopicRequest: { type: object, required: [title, structured_content], properties: { title: { type: string }, structured_content: { $ref: '#/components/schemas/StructuredContent' } } }
     CreatePostRequest: { type: object, required: [content, post_type], properties: { content: { type: string, minLength: 1 }, parent_id: { type: integer, format: int64 }, post_type: { type: string, enum: [debate, evidence, experience, thanks] } } }
     FeedbackRequest: { type: object, required: [target_type, target_id, stance, tag, reason], properties: { target_type: { type: string, enum: [topic, post] }, target_id: { type: integer, format: int64 }, stance: { type: string, enum: [support, challenge] }, tag: { type: string, enum: [logical, new_perspective, well_sourced, empathetic, factual_concern, reasoning_gap, inappropriate] }, reason: { type: string, minLength: 5, maxLength: 120 } } }

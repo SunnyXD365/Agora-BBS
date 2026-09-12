@@ -60,6 +60,7 @@ func main() {
 	feedbackDAO := dao.NewFeedbackDAO(database)
 	reviewDAO := dao.NewReviewDAO(database)
 	adminDAO := dao.NewAdminDAO(database)
+	contentDAO := dao.NewContentDAO(database)
 
 	// 4. Service 层初始化 (注入对应的 DAO 与配置项)
 	mailSender := mailer.NewSMTP(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
@@ -73,6 +74,7 @@ func main() {
 	feedbackService := service.NewFeedbackService(feedbackDAO, governanceService, coolingStarter)
 	reviewService := service.NewReviewService(reviewDAO, governanceService, coolingStarter)
 	adminService := service.NewAdminService(adminDAO, redisStore, coolingStarter, coolingStarter)
+	contentService := service.NewContentService(contentDAO)
 
 	// 5. Handler 层初始化 (注入对应的 Service)
 	userHandler := handler.NewUserHandler(userService)
@@ -85,6 +87,7 @@ func main() {
 	feedbackHandler := handler.NewFeedbackHandler(feedbackService)
 	reviewHandler := handler.NewReviewHandler(reviewService)
 	adminHandler := handler.NewAdminHandler(adminService)
+	contentHandler := handler.NewContentHandler(contentService)
 
 	// 6. 组装 Handlers 并传递给 SetupRouter
 	handlers := &router.Handlers{
@@ -98,6 +101,7 @@ func main() {
 		FeedbackHandler:   feedbackHandler,
 		ReviewHandler:     reviewHandler,
 		AdminHandler:      adminHandler,
+		ContentHandler:    contentHandler,
 	}
 
 	r := router.SetupRouter(cfg, redisStore, database, handlers)

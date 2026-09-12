@@ -103,6 +103,29 @@ export interface Bookmark {
   topic: Topic;
 }
 
+export interface MyContentItem {
+  id: number;
+  type: 'topic' | 'post';
+  topic_id: number;
+  title: string;
+  excerpt: string;
+  status: string;
+  post_type?: Post['post_type'];
+  cooling_ends_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SearchResult {
+  id: number;
+  type: 'topic' | 'post';
+  topic_id: number;
+  title: string;
+  excerpt: string;
+  author_name: string;
+  created_at: string;
+}
+
 export interface GovernancePolicy {
   cooling_seconds: number;
   reply_dwell_seconds: number;

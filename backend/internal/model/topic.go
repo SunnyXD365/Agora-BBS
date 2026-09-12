@@ -50,3 +50,15 @@ type UpdateTopicReq struct {
 	Title             string            `json:"title" binding:"required,min=3,max=128"`
 	StructuredContent StructuredContent `json:"structured_content" binding:"required"`
 }
+
+type SaveTopicDraftReq struct {
+	CategoryID        int64             `json:"category_id" binding:"required"`
+	Title             string            `json:"title" binding:"max=128"`
+	StructuredContent DraftTopicContent `json:"structured_content"`
+}
+
+type DraftTopicContent struct {
+	Claim       string `json:"claim"`
+	Evidence    string `json:"evidence"`
+	Uncertainty string `json:"uncertainty"`
+}

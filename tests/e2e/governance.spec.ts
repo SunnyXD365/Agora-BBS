@@ -118,3 +118,55 @@ test('homepage pagination requests and renders the selected page', async ({ page
   await expect(page.getByRole('link', { name: '分页测试主题 · 第 2 页 · 每页 20 条', exact: true })).toBeVisible();
   await expect(page.getByText('第 2/2 页')).toBeVisible();
 });
+
+test('topic drafts, personal content and fuzzy search APIs', async ({ request, page }) => {
+  const api = '/api/v1';
+  const loginResponse = await request.post(`${api}/auth/login`, { data: { username: 'demo_l2', password: 'password' } });
+  expect(loginResponse.ok()).toBeTruthy();
+  const auth = (await loginResponse.json() as Envelope<Auth>).data;
+  const headers = { Authorization: `Bearer ${auth.token}` };
+  const categoriesResponse = await request.get(`${api}/categories`);
+  const categories = (await categoriesResponse.json() as Envelope<Array<{ id: number }>>).data;
+  expect(categories.length).toBeGreaterThan(0);
+
+  const suffix = Date.now();
+  const created = await request.post(`${api}/topics/drafts`, { headers, data: { category_id: categories[0].id, title: '', structured_content: { claim: '', evidence: '', uncertainty: '' } } });
+  expect(created.ok()).toBeTruthy();
+  const draft = (await created.json() as Envelope<{ id: number; status: string }>).data;
+  expect(draft.status).toBe('draft');
+  expect((await request.get(`${api}/topics/${draft.id}`)).status()).toBe(404);
+
+  const title = `可检索草稿 ${suffix}`;
+  const updated = await request.patch(`${api}/topics/${draft.id}/draft`, { headers, data: { category_id: categories[0].id, title, structured_content: { claim: '这是一条完整的草稿核心观点。', evidence: '用于验证服务端草稿生命周期。', uncertainty: '测试结束后将被撤回。' } } });
+  expect(updated.ok()).toBeTruthy();
+  const mine = await request.get(`${api}/users/me/contents?type=topic&status=draft&page=1&page_size=10`, { headers });
+  expect(mine.ok()).toBeTruthy();
+  expect((await mine.json() as Envelope<{ items: Array<{ id: number }> }>).data.items.some((item) => item.id === draft.id)).toBeTruthy();
+
+  const published = await request.post(`${api}/topics/${draft.id}/publish`, { headers });
+  expect(published.ok()).toBeTruthy();
+  expect((await published.json() as Envelope<{ status: string }>).data.status).toBe('cooling');
+  expect((await request.delete(`${api}/topics/${draft.id}`, { headers })).ok()).toBeTruthy();
+
+  const disposable = await request.post(`${api}/topics/drafts`, { headers, data: { category_id: categories[0].id, title: '待删除草稿', structured_content: { claim: '', evidence: '', uncertainty: '' } } });
+  const disposableDraft = (await disposable.json() as Envelope<{ id: number }>).data;
+  expect((await request.delete(`${api}/topics/${disposableDraft.id}/draft`, { headers })).ok()).toBeTruthy();
+
+  const search = await request.get(`${api}/search?q=${encodeURIComponent('结构化')}&page=1&page_size=10`);
+  expect(search.ok()).toBeTruthy();
+  const searchData = (await search.json() as Envelope<{ items: Array<{ type: string; title: string }>; total: number }>).data;
+  expect(searchData.total).toBeGreaterThan(0);
+  expect(searchData.items.some((item) => item.type === 'topic' && item.title.includes('结构化'))).toBeTruthy();
+
+  await page.goto('/login');
+  await page.evaluate(({ token }) => localStorage.setItem('token', token), auth);
+  await page.goto('/topics/new');
+  await expect(page.getByRole('heading', { name: '发起一个新主题' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '先搭好结构' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '发布前检查' })).toBeVisible();
+  await page.goto('/my-content');
+  await expect(page.getByRole('heading', { name: '我的内容' })).toBeVisible();
+  await page.goto(`/search?q=${encodeURIComponent('结构化')}`);
+  await expect(page.getByRole('heading', { name: '搜索论坛内容' })).toBeVisible();
+  await expect(page.getByText(/找到 \d+ 条结果/)).toBeVisible();
+});

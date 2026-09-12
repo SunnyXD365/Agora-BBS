@@ -41,6 +41,74 @@ func (h *TopicHandler) CreateTopic(c *gin.Context) {
 	response.Success(c, gin.H{"topic_id": topic.ID, "status": topic.Status, "cooling_ends_at": topic.CoolingEndsAt})
 }
 
+func (h *TopicHandler) CreateDraft(c *gin.Context) {
+	var req model.SaveTopicDraftReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, 40001, "invalid draft")
+		return
+	}
+	topic, err := h.topicService.SaveDraft(c.Request.Context(), c.GetInt64("userID"), 0, &req)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, 40001, "failed to save draft")
+		return
+	}
+	response.Success(c, topic)
+}
+
+func (h *TopicHandler) UpdateDraft(c *gin.Context) {
+	topicID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, 40003, "invalid topic id")
+		return
+	}
+	var req model.SaveTopicDraftReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, 40001, "invalid draft")
+		return
+	}
+	topic, err := h.topicService.SaveDraft(c.Request.Context(), c.GetInt64("userID"), topicID, &req)
+	if err != nil {
+		response.Error(c, http.StatusConflict, 40901, "draft is not editable")
+		return
+	}
+	response.Success(c, topic)
+}
+
+func (h *TopicHandler) PublishDraft(c *gin.Context) {
+	topicID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, 40003, "invalid topic id")
+		return
+	}
+	topic, err := h.topicService.PublishDraft(c.Request.Context(), c.GetInt64("userID"), topicID)
+	if errors.Is(err, service.ErrTopicLocked) {
+		response.Error(c, http.StatusForbidden, 40301, err.Error())
+		return
+	}
+	if errors.Is(err, service.ErrInvalidDraft) {
+		response.Error(c, http.StatusBadRequest, 40001, "draft title or claim is incomplete")
+		return
+	}
+	if err != nil {
+		response.Error(c, http.StatusConflict, 40901, "draft is not publishable")
+		return
+	}
+	response.Success(c, gin.H{"topic_id": topic.ID, "status": topic.Status, "cooling_ends_at": topic.CoolingEndsAt})
+}
+
+func (h *TopicHandler) DeleteDraft(c *gin.Context) {
+	topicID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, 40003, "invalid topic id")
+		return
+	}
+	if err := h.topicService.DeleteDraft(c.Request.Context(), c.GetInt64("userID"), topicID); err != nil {
+		response.Error(c, http.StatusConflict, 40901, "draft is not deletable")
+		return
+	}
+	response.Success(c, gin.H{"deleted": true})
+}
+
 func (h *TopicHandler) GetTopicDetail(c *gin.Context) {
 	idStr := c.Param("id")
 	topicID, err := strconv.ParseInt(idStr, 10, 64)

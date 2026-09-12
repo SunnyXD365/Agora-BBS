@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -13,6 +15,8 @@ import (
 	"agora-backend/internal/model"
 	"agora-backend/internal/workflow"
 )
+
+var ErrInvalidDraft = errors.New("draft is incomplete")
 
 type TopicService struct {
 	topicDAO   *dao.TopicDAO
@@ -68,6 +72,79 @@ func (s *TopicService) CreateTopic(ctx context.Context, userID int64, req *model
 		return nil, err
 	}
 	return topic, nil
+}
+
+func (s *TopicService) SaveDraft(ctx context.Context, userID, topicID int64, req *model.SaveTopicDraftReq) (*model.Topic, error) {
+	structured := model.StructuredContent{
+		Claim:       strings.TrimSpace(req.StructuredContent.Claim),
+		Evidence:    strings.TrimSpace(req.StructuredContent.Evidence),
+		Uncertainty: strings.TrimSpace(req.StructuredContent.Uncertainty),
+	}
+	encoded, err := json.Marshal(structured)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.topicDAO.CategoryRequiresReview(ctx, req.CategoryID); err != nil {
+		return nil, err
+	}
+	topic := &model.Topic{ID: topicID, CategoryID: req.CategoryID, UserID: userID, Title: strings.TrimSpace(req.Title), Content: structured.Claim, StructuredContent: encoded, Status: "draft"}
+	if topicID == 0 {
+		err = s.topicDAO.CreateDraft(ctx, topic)
+	} else {
+		err = s.topicDAO.UpdateDraft(ctx, topic)
+		if err == nil {
+			topic, err = s.topicDAO.GetOwnedDraft(ctx, topicID, userID)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	_ = s.cache.DeletePrefix(ctx, fmt.Sprintf("topics:detail:%d:", topic.ID))
+	return topic, nil
+}
+
+func (s *TopicService) PublishDraft(ctx context.Context, userID, topicID int64) (*model.Topic, error) {
+	if err := s.governance.RequireTopicPermission(ctx, userID); err != nil {
+		return nil, err
+	}
+	topic, err := s.topicDAO.GetOwnedDraft(ctx, topicID, userID)
+	if err != nil || topic == nil {
+		return nil, sql.ErrNoRows
+	}
+	var structured model.StructuredContent
+	if err := json.Unmarshal(topic.StructuredContent, &structured); err != nil {
+		return nil, err
+	}
+	topic.Title = strings.TrimSpace(topic.Title)
+	structured.Claim = strings.TrimSpace(structured.Claim)
+	if utf8.RuneCountInString(topic.Title) < 3 || utf8.RuneCountInString(topic.Title) > 128 || utf8.RuneCountInString(structured.Claim) < 5 {
+		return nil, ErrInvalidDraft
+	}
+	categoryRequiresReview, err := s.topicDAO.CategoryRequiresReview(ctx, topic.CategoryID)
+	if err != nil {
+		return nil, err
+	}
+	policy := s.governance.Policy()
+	endsAt := time.Now().Add(time.Duration(policy.CoolingSeconds) * time.Second)
+	if err := s.topicDAO.PublishDraft(ctx, topicID, userID, endsAt); err != nil {
+		return nil, err
+	}
+	topic.Status = "cooling"
+	topic.CoolingEndsAt = &endsAt
+	_ = s.cache.DeletePrefix(ctx, fmt.Sprintf("topics:detail:%d:", topicID))
+	requiresReview := categoryRequiresReview || utf8.RuneCountInString(structured.Claim+structured.Evidence+structured.Uncertainty) >= policy.LongTopicChars
+	if err := s.cooling.StartCooling(ctx, workflow.CoolingInput{Kind: "topic", ID: topicID, EndsAt: endsAt, RequiresReview: requiresReview}); err != nil {
+		return nil, err
+	}
+	return topic, nil
+}
+
+func (s *TopicService) DeleteDraft(ctx context.Context, userID, topicID int64) error {
+	err := s.topicDAO.DeleteDraft(ctx, topicID, userID)
+	if err == nil {
+		_ = s.cache.DeletePrefix(ctx, fmt.Sprintf("topics:detail:%d:", topicID))
+	}
+	return err
 }
 
 func (s *TopicService) GetTopicDetail(ctx context.Context, topicID, viewerID int64) (*model.Topic, error) {
