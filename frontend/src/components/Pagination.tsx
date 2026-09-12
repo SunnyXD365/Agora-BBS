@@ -3,11 +3,12 @@ type PaginationProps = {
   pageSize: number;
   total: number;
   onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
   itemLabel?: string;
   disabled?: boolean;
 };
 
-export default function Pagination({ page, pageSize, total, onPageChange, itemLabel = '条记录', disabled = false }: PaginationProps) {
+export default function Pagination({ page, pageSize, total, onPageChange, onPageSizeChange, itemLabel = '条记录', disabled = false }: PaginationProps) {
   if (total <= 0) return null;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(Math.max(1, page), totalPages);
@@ -17,7 +18,7 @@ export default function Pagination({ page, pageSize, total, onPageChange, itemLa
 
   return (
     <nav aria-label="分页导航" className="paper-card flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm">
-      <span className="text-xs text-[var(--text-muted)]">共 {total} {itemLabel} · 第 {current}/{totalPages} 页</span>
+      <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]"><span>共 {total} {itemLabel} · 第 {current}/{totalPages} 页</span><label className="flex items-center gap-1.5">每页<select aria-label="每页条数" value={pageSize} disabled={disabled} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="rounded border px-2 py-1 text-xs"><option value={10}>10 条</option><option value={20}>20 条</option><option value={50}>50 条</option></select></label></div>
       <div className="flex items-center gap-1">
         <button type="button" disabled={disabled || current === 1} onClick={() => onPageChange(current - 1)} className="rounded border px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40">上一页</button>
         {start > 1 && <span className="px-1 text-[var(--text-muted)]">…</span>}

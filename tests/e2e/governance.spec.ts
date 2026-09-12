@@ -93,23 +93,28 @@ test('registration, cooling, feedback, blind review and administration', async (
   await page.getByRole('link', { name: /用户管理/ }).first().click();
   await expect(page.getByRole('heading', { name: '用户管理' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: '分页导航' })).toBeVisible();
+  await expect(page.getByLabel('每页条数')).toHaveValue('10');
 });
 
 test('homepage pagination requests and renders the selected page', async ({ page }) => {
   await page.route('**/api/v1/topics?**', async (route) => {
-    const requestedPage = Number(new URL(route.request().url()).searchParams.get('page') || 1);
+    const url = new URL(route.request().url());
+    const requestedPage = Number(url.searchParams.get('page') || 1);
+    const requestedPageSize = Number(url.searchParams.get('page_size') || 10);
     const topic = {
-      id: 9000 + requestedPage, category_id: 1, user_id: 1, author_name: 'pagination_test',
-      title: `分页测试主题 · 第 ${requestedPage} 页`, content: '用于验证分页请求。',
+      id: 9000 + requestedPage + requestedPageSize, category_id: 1, user_id: 1, author_name: 'pagination_test',
+      title: `分页测试主题 · 第 ${requestedPage} 页 · 每页 ${requestedPageSize} 条`, content: '用于验证分页请求。',
       structured_content: { claim: '用于验证分页请求。', evidence: '', uncertainty: '' }, status: 'published',
       view_count: requestedPage, post_count: 0, like_count: 0,
       created_at: '2026-09-11T00:00:00Z', updated_at: '2026-09-11T00:00:00Z',
     };
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ code: 0, msg: 'success', data: { items: [topic], total: 21, page: requestedPage, page_size: 10 }, request_id: 'e2e-pagination' }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ code: 0, msg: 'success', data: { items: [topic], total: 21, page: requestedPage, page_size: requestedPageSize }, request_id: 'e2e-pagination' }) });
   });
   await page.goto('/');
-  await expect(page.getByRole('link', { name: '分页测试主题 · 第 1 页', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: '分页测试主题 · 第 1 页 · 每页 10 条', exact: true })).toBeVisible();
+  await page.getByLabel('每页条数').selectOption('20');
+  await expect(page.getByRole('link', { name: '分页测试主题 · 第 1 页 · 每页 20 条', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '下一页' }).click();
-  await expect(page.getByRole('link', { name: '分页测试主题 · 第 2 页', exact: true })).toBeVisible();
-  await expect(page.getByText('第 2/3 页')).toBeVisible();
+  await expect(page.getByRole('link', { name: '分页测试主题 · 第 2 页 · 每页 20 条', exact: true })).toBeVisible();
+  await expect(page.getByText('第 2/2 页')).toBeVisible();
 });

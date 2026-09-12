@@ -10,7 +10,6 @@ import ContextualFeedback from '@/components/ContextualFeedback';
 import Pagination from '@/components/Pagination';
 
 type PostNode = Post & { children: PostNode[] };
-const POST_PAGE_SIZE = 20;
 
 const postTypeLabels: Record<Post['post_type'], string> = {
   debate: '质疑与辩论', evidence: '补充论据', experience: '个人经历', thanks: '单纯感谢',
@@ -54,6 +53,7 @@ export default function TopicDetailPage() {
   const [topic, setTopic] = useState<Topic | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [postPage, setPostPage] = useState(1);
+  const [postPageSize, setPostPageSize] = useState(20);
   const [postTotal, setPostTotal] = useState(0);
   const [postsLoading, setPostsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -91,12 +91,12 @@ export default function TopicDetailPage() {
   useEffect(() => {
     if (!topicId) return;
     let cancelled = false;
-    postApi.getPosts(topicId, { page: postPage, page_size: POST_PAGE_SIZE })
+    postApi.getPosts(topicId, { page: postPage, page_size: postPageSize })
       .then((result) => { if (!cancelled) { setPosts(result.data.items); setPostTotal(result.data.total); } })
       .catch((err: unknown) => { if (!cancelled) setError(getErrorMessage(err, '回复加载失败')); })
       .finally(() => { if (!cancelled) setPostsLoading(false); });
     return () => { cancelled = true; };
-  }, [postPage, topicId]);
+  }, [postPage, postPageSize, topicId]);
 
   useEffect(() => {
     const updateProgress = () => {
@@ -147,9 +147,9 @@ export default function TopicDetailPage() {
   }, []);
 
   const refreshPosts = async () => {
-    const result = await postApi.getPosts(topicId, { page: postPage, page_size: POST_PAGE_SIZE });
+    const result = await postApi.getPosts(topicId, { page: postPage, page_size: postPageSize });
     if (result.code === 0) {
-      const lastPage = Math.max(1, Math.ceil(result.data.total / POST_PAGE_SIZE));
+      const lastPage = Math.max(1, Math.ceil(result.data.total / postPageSize));
       if (postPage > lastPage) { setPostsLoading(true); setPostPage(lastPage); return; }
       setPosts(result.data.items); setPostTotal(result.data.total);
     }
@@ -173,7 +173,7 @@ export default function TopicDetailPage() {
       const result = await postApi.createPost(topicId, { content: replyContent, parent_id: replyTo?.id, post_type: replyType });
       if (result.code === 0) {
         setReplyContent(''); setReplyTo(null);
-        const nextPage = Math.max(1, Math.ceil((postTotal + 1) / POST_PAGE_SIZE));
+        const nextPage = Math.max(1, Math.ceil((postTotal + 1) / postPageSize));
         if (nextPage === postPage) await refreshPosts(); else { setPostsLoading(true); setPostPage(nextPage); }
         setTopic((current) => current ? { ...current, post_count: current.post_count + 1 } : current);
       }
@@ -231,7 +231,7 @@ export default function TopicDetailPage() {
         <h2 className="mb-3 text-sm font-bold">全部回复（{postTotal}）</h2>
         {clusters.length > 0 && <div className="mb-4 flex flex-wrap gap-2 rounded-lg bg-stone-100 p-3 text-xs"><button onClick={() => setSelectedCluster(null)} className={`rounded-full px-3 py-1 ${selectedCluster === null ? 'bg-stone-800 text-white' : 'bg-white'}`}>全部讨论</button>{clusters.map((cluster) => <button key={cluster.id} title={cluster.summary} onClick={() => setSelectedCluster(cluster.id)} className={`rounded-full px-3 py-1 ${selectedCluster === cluster.id ? 'bg-stone-800 text-white' : 'bg-white'}`}>{cluster.tag} · {cluster.post_ids.length}</button>)}</div>}
         {postsLoading ? <div className="h-32 animate-pulse rounded-xl bg-stone-200" /> : visiblePostTree.length === 0 ? <div className="paper-card rounded-xl p-8 text-center text-sm text-[var(--text-muted)]">{selectedCluster ? '该讨论标签在本页暂无可见回复，可切换其他页查看。' : '暂无回复。'}</div> : visiblePostTree.map((node) => <PostBranch key={node.id} node={node} depth={0} onReply={setReplyTo} onRecall={handleRecallPost} currentUserID={user?.id} canFeedback={canFeedback} />)}
-        {!postsLoading && <Pagination page={postPage} pageSize={POST_PAGE_SIZE} total={postTotal} onPageChange={(nextPage) => { setSelectedCluster(null); setPostsLoading(true); setPostPage(nextPage); }} itemLabel="条回复" />}
+        {!postsLoading && <Pagination page={postPage} pageSize={postPageSize} total={postTotal} onPageChange={(nextPage) => { setSelectedCluster(null); setPostsLoading(true); setPostPage(nextPage); }} onPageSizeChange={(size) => { setSelectedCluster(null); setPostsLoading(true); setPostPage(1); setPostPageSize(size); }} itemLabel="条回复" />}
       </section>
     </div>
   );

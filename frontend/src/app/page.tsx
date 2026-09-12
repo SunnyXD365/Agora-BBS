@@ -10,8 +10,6 @@ import UsageGuideCard from '@/components/UsageGuideCard';
 import CommunitySidebar from '@/components/CommunitySidebar';
 import Pagination from '@/components/Pagination';
 
-const PAGE_SIZE = 10;
-
 export default function HomePage() {
   const { user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -19,6 +17,7 @@ export default function HomePage() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [topicTotal, setTopicTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [policy, setPolicy] = useState<GovernancePolicy | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -44,7 +43,7 @@ export default function HomePage() {
   useEffect(() => {
     let cancelled = false;
     topicApi
-      .getTopics({ category_id: selectedCategory, page, page_size: PAGE_SIZE })
+      .getTopics({ category_id: selectedCategory, page, page_size: pageSize })
       .then((res) => {
         if (!cancelled && res.code === 0) { setTopics(res.data.items); setTopicTotal(res.data.total); }
       })
@@ -55,7 +54,7 @@ export default function HomePage() {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [page, selectedCategory, refreshKey]);
+  }, [page, pageSize, selectedCategory, refreshKey]);
 
   const changePage = (nextPage: number) => {
     setLoading(true); setPage(nextPage);
@@ -136,7 +135,7 @@ export default function HomePage() {
             ))}
           </div>
         )}
-        {!loading && <Pagination page={page} pageSize={PAGE_SIZE} total={topicTotal} onPageChange={changePage} itemLabel="个主题" />}
+        {!loading && <Pagination page={page} pageSize={pageSize} total={topicTotal} onPageChange={changePage} onPageSizeChange={(size) => { setLoading(true); setPage(1); setPageSize(size); }} itemLabel="个主题" />}
       </div>
 
       {/* 右侧：成长、热议与社区规则 */}
