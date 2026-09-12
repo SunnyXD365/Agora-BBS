@@ -2,13 +2,22 @@ import { expect, test } from '@playwright/test';
 
 type Envelope<T> = { code: number; data: T };
 type Auth = { token: string; user: { id: number; role: string; unlock_level: number; onboarding_status: string } };
+type LoginResult = Partial<Auth> & { requires_email_verification?: boolean; challenge_id?: string; development_verification_code?: string };
 
 test('registration, cooling, feedback, blind review and administration', async ({ request, page }) => {
   const api = '/api/v1';
   const login = async (username: string, password = 'password') => {
     const response = await request.post(`${api}/auth/login`, { data: { username, password } });
     expect(response.ok()).toBeTruthy();
-    return (await response.json() as Envelope<Auth>).data;
+    const data = (await response.json() as Envelope<LoginResult>).data;
+    if (data.requires_email_verification) {
+      expect(data.challenge_id).toBeTruthy();
+      expect(data.development_verification_code).toMatch(/^\d{6}$/);
+      const verified = await request.post(`${api}/auth/admin/verify-email`, { data: { challenge_id: data.challenge_id, code: data.development_verification_code } });
+      expect(verified.ok()).toBeTruthy();
+      return (await verified.json() as Envelope<Auth>).data;
+    }
+    return data as Auth;
   };
   const authHeaders = (token: string) => ({ Authorization: `Bearer ${token}` });
 
@@ -79,9 +88,11 @@ test('registration, cooling, feedback, blind review and administration', async (
   await page.goto('/login');
   await page.evaluate(({ token, user }) => { localStorage.setItem('token', token); localStorage.setItem('e2e_user', JSON.stringify(user)); }, admin);
   await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: '社区治理后台' })).toBeVisible();
-  await expect(page.getByText('LLM 作业与失败重试')).toBeVisible();
-  expect(await page.getByRole('navigation', { name: '分页导航' }).count()).toBeGreaterThanOrEqual(3);
+  await expect(page.getByRole('heading', { name: '运营总览' })).toBeVisible();
+  await expect(page.getByText('邮箱二次验证已完成')).toBeVisible();
+  await page.getByRole('link', { name: /用户管理/ }).first().click();
+  await expect(page.getByRole('heading', { name: '用户管理' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: '分页导航' })).toBeVisible();
 });
 
 test('homepage pagination requests and renders the selected page', async ({ page }) => {

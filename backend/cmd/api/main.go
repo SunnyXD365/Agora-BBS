@@ -10,6 +10,7 @@ import (
 	"agora-backend/internal/dao"
 	"agora-backend/internal/db"
 	"agora-backend/internal/handler"
+	"agora-backend/internal/mailer"
 	"agora-backend/internal/router"
 	"agora-backend/internal/service"
 	agoraworkflow "agora-backend/internal/workflow"
@@ -61,7 +62,8 @@ func main() {
 	adminDAO := dao.NewAdminDAO(database)
 
 	// 4. Service 层初始化 (注入对应的 DAO 与配置项)
-	userService := service.NewUserService(userDAO, cfg.JWTSecret, cfg.JWTExpireHours)
+	mailSender := mailer.NewSMTP(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
+	userService := service.NewUserService(userDAO, cfg.JWTSecret, cfg.JWTExpireHours, cfg.AppEnv, mailSender)
 	categoryService := service.NewCategoryService(categoryDAO, redisStore)
 	governanceService := service.NewGovernanceService(governanceDAO, userDAO, cfg, coolingStarter)
 	topicService := service.NewTopicService(topicDAO, governanceService, coolingStarter, redisStore)

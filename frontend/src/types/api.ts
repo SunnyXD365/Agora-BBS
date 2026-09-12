@@ -46,6 +46,16 @@ export interface Category {
   requires_review: boolean;
 }
 
+export interface LoginData {
+  token?: string;
+  user?: UserProfile;
+  requires_email_verification: boolean;
+  challenge_id?: string;
+  masked_email?: string;
+  expires_in_seconds?: number;
+  development_verification_code?: string;
+}
+
 export interface StructuredContent {
   claim: string;
   evidence: string;
@@ -182,8 +192,15 @@ export interface AdminOverview {
   topics_total: number;
   posts_total: number;
   active_users_7_days: number;
+  new_users_today: number;
+  feedback_total: number;
+  bookmarks_total: number;
+  suspended_users: number;
+  verified_read_hours: number;
   content_status: Record<string, number>;
   trust_distribution: Record<string, number>;
+  level_distribution: Record<string, number>;
+  feedback_distribution: Record<string, number>;
   review_total: number;
   review_completed: number;
   review_expired: number;
@@ -194,6 +211,8 @@ export interface AdminOverview {
   llm_prompt_tokens: number;
   llm_output_tokens: number;
   trend: AdminDailyTrend[];
+  trend_days: number;
+  categories: { name: string; topics: number; posts: number }[];
 }
 export interface AdminUser { id: number; username: string; email: string; role: string; status: string; unlock_level: number; trust_score: number; verified_read_seconds: number; onboarding_status: string; created_at: string; }
 export interface AdminContent { id: number; type: 'topic' | 'post'; title: string; excerpt: string; author_name: string; status: string; created_at: string; }

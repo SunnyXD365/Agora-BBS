@@ -20,6 +20,11 @@ type Config struct {
 	LLMBaseURL                  string
 	LLMModel                    string
 	LLMAPIKey                   string
+	SMTPHost                    string
+	SMTPPort                    int
+	SMTPUsername                string
+	SMTPPassword                string
+	SMTPFrom                    string
 }
 
 // 从环境变量加载配置，提供默认备选项
@@ -47,6 +52,11 @@ func LoadConfig() *Config {
 		LLMBaseURL:                  getEnv("LLM_BASE_URL", ""),
 		LLMModel:                    getEnv("LLM_MODEL", ""),
 		LLMAPIKey:                   getEnv("LLM_API_KEY", ""),
+		SMTPHost:                    getEnv("SMTP_HOST", ""),
+		SMTPPort:                    getEnvInt("SMTP_PORT", 587),
+		SMTPUsername:                getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:                getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:                    getEnv("SMTP_FROM", ""),
 	}
 }
 

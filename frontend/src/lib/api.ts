@@ -26,8 +26,12 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
+    const requiresAdminReverification = error.response?.data?.code === 40391;
+    if ((error.response?.status === 401 || requiresAdminReverification) && typeof window !== 'undefined') {
       localStorage.removeItem('token');
+      if (requiresAdminReverification && window.location.pathname.startsWith('/admin')) {
+        window.dispatchEvent(new Event('agora:admin-reverification-required'));
+      }
     }
     return Promise.reject(error.response?.data || error);
   }

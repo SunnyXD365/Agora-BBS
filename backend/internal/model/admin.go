@@ -13,23 +13,38 @@ type AdminDailyTrend struct {
 	Feedback int    `json:"feedback"`
 }
 
+type AdminCategoryStat struct {
+	Name   string `json:"name"`
+	Topics int64  `json:"topics"`
+	Posts  int64  `json:"posts"`
+}
+
 type AdminOverview struct {
-	UsersTotal        int64             `json:"users_total"`
-	TopicsTotal       int64             `json:"topics_total"`
-	PostsTotal        int64             `json:"posts_total"`
-	ActiveUsers7Days  int64             `json:"active_users_7_days"`
-	ContentStatus     map[string]int64  `json:"content_status"`
-	TrustDistribution map[string]int64  `json:"trust_distribution"`
-	ReviewTotal       int64             `json:"review_total"`
-	ReviewCompleted   int64             `json:"review_completed"`
-	ReviewExpired     int64             `json:"review_expired"`
-	ReviewFair        int64             `json:"review_fair"`
-	LLMCalls          int64             `json:"llm_calls"`
-	LLMSuccess        int64             `json:"llm_success"`
-	LLMAverageMS      float64           `json:"llm_average_ms"`
-	LLMPromptTokens   int64             `json:"llm_prompt_tokens"`
-	LLMOutputTokens   int64             `json:"llm_output_tokens"`
-	Trend             []AdminDailyTrend `json:"trend"`
+	UsersTotal           int64               `json:"users_total"`
+	TopicsTotal          int64               `json:"topics_total"`
+	PostsTotal           int64               `json:"posts_total"`
+	ActiveUsers7Days     int64               `json:"active_users_7_days"`
+	NewUsersToday        int64               `json:"new_users_today"`
+	FeedbackTotal        int64               `json:"feedback_total"`
+	BookmarksTotal       int64               `json:"bookmarks_total"`
+	SuspendedUsers       int64               `json:"suspended_users"`
+	VerifiedReadHours    float64             `json:"verified_read_hours"`
+	ContentStatus        map[string]int64    `json:"content_status"`
+	TrustDistribution    map[string]int64    `json:"trust_distribution"`
+	LevelDistribution    map[string]int64    `json:"level_distribution"`
+	FeedbackDistribution map[string]int64    `json:"feedback_distribution"`
+	ReviewTotal          int64               `json:"review_total"`
+	ReviewCompleted      int64               `json:"review_completed"`
+	ReviewExpired        int64               `json:"review_expired"`
+	ReviewFair           int64               `json:"review_fair"`
+	LLMCalls             int64               `json:"llm_calls"`
+	LLMSuccess           int64               `json:"llm_success"`
+	LLMAverageMS         float64             `json:"llm_average_ms"`
+	LLMPromptTokens      int64               `json:"llm_prompt_tokens"`
+	LLMOutputTokens      int64               `json:"llm_output_tokens"`
+	Trend                []AdminDailyTrend   `json:"trend"`
+	TrendDays            int                 `json:"trend_days"`
+	Categories           []AdminCategoryStat `json:"categories"`
 }
 
 type AdminUser struct {

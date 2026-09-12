@@ -23,7 +23,8 @@
 | 方法与路径 | 权限 | 说明 |
 | --- | --- | --- |
 | `POST /auth/register` | 公开 | 注册并返回 JWT；新用户为 L0 |
-| `POST /auth/login` | 公开 | 登录 |
+| `POST /auth/login` | 公开 | 统一登录；管理员返回邮箱验证挑战 |
+| `POST /auth/admin/verify-email` | 公开 | 校验管理员邮箱验证码并签发管理 JWT |
 | `GET /users/me` | 登录 | 资料、等级、能力和解锁进度 |
 | `PUT /users/me/onboarding` | 登录 | 提交社区自述并触发盲审 |
 | `GET /categories` | 公开 | 启用分类 |
@@ -58,7 +59,19 @@ Content-Type: application/json
 {"username":"alice","password":"password123","email":"alice@example.com"}
 ```
 
-响应 `data` 为 `{token,user}`。登录请求体为相同的 `username/password`。
+普通用户响应 `data` 为 `{token,user}`。管理员密码正确后不会立即签发 Token，而是返回：
+
+```json
+{"requires_email_verification":true,"challenge_id":"...","masked_email":"a***@example.com","expires_in_seconds":600}
+```
+
+随后提交 `POST /auth/admin/verify-email`：
+
+```json
+{"challenge_id":"...","code":"123456"}
+```
+
+验证码 10 分钟有效、最多尝试 5 次；成功后返回 `{token,user}`。管理员接口还会检查 JWT 中的邮箱验证声明，旧 Token 不能绕过二次验证。开发环境未配置 SMTP 时响应会包含仅供本地演示的 `development_verification_code`；生产环境绝不返回验证码，且 SMTP 未配置时拒绝管理员登录。
 
 ## 4. 结构化发帖与冷静期
 
@@ -124,7 +137,7 @@ Content-Type: application/json
 
 ## 8. 管理接口
 
-- `GET /admin/overview`：7 日新增趋势、内容状态、信任分布、盲审和 LLM 汇总。
+- `GET /admin/overview?days=7|30|90`：增长趋势、用户等级/信任、反馈标签、分类内容规模、盲审和 LLM 汇总。
 - `GET /admin/users`、`PATCH /admin/users/{id}/status`：查看隐藏信任分、停用/恢复账号。
 - `GET /admin/trust-logs`：不可覆盖的信任流水，可按 `user_id` 筛选。
 - `GET /admin/contents?type=topic|post`、`PATCH /admin/contents/{type}/{id}/visibility`：隐藏/恢复；不支持修改正文。

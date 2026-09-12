@@ -32,8 +32,11 @@ func normalizePage(page, pageSize int) (int, int) {
 	}
 	return page, pageSize
 }
-func (s *AdminService) Overview(ctx context.Context) (*model.AdminOverview, error) {
-	return s.dao.Overview(ctx)
+func (s *AdminService) Overview(ctx context.Context, days int) (*model.AdminOverview, error) {
+	if days != 7 && days != 30 && days != 90 {
+		days = 7
+	}
+	return s.dao.Overview(ctx, days)
 }
 func (s *AdminService) Users(ctx context.Context, page, pageSize int) (*model.Page[*model.AdminUser], error) {
 	page, pageSize = normalizePage(page, pageSize)

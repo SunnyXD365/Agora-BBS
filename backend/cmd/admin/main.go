@@ -24,6 +24,14 @@ func main() {
 	role := "admin"
 	if *action == "demote" {
 		role = "user"
+	} else {
+		var email string
+		if err := database.QueryRow(`SELECT email FROM users WHERE username=$1`, *username).Scan(&email); err != nil {
+			log.Fatalf("user %q not found", *username)
+		}
+		if email == "" {
+			log.Fatal("cannot promote an account without an email address")
+		}
 	}
 	result, err := database.Exec(`UPDATE users SET role=$2,updated_at=CURRENT_TIMESTAMP WHERE username=$1`, *username, role)
 	if err != nil {

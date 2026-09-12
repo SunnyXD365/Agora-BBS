@@ -1,109 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/context/AuthContext';
 import { adminApi, getErrorMessage } from '@/services';
-import { AdminContent, AdminLLMJob, AdminOverview, AdminTrustLog, AdminUser, Category } from '@/types/api';
-import Pagination from '@/components/Pagination';
+import { AdminOverview } from '@/types/api';
+import { Notice, PageTitle } from '@/components/admin/AdminUI';
 
-const PAGE_SIZE = 10;
-
-export default function AdminPage() {
-  const { user, isLoading } = useAuth();
-  const [overview, setOverview] = useState<AdminOverview | null>(null);
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [contents, setContents] = useState<AdminContent[]>([]);
-  const [jobs, setJobs] = useState<AdminLLMJob[]>([]);
-  const [logs, setLogs] = useState<AdminTrustLog[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [newCategory, setNewCategory] = useState({ name: '', slug: '', description: '' });
-  const [userPage, setUserPage] = useState(1);
-  const [userTotal, setUserTotal] = useState(0);
-  const [contentPage, setContentPage] = useState(1);
-  const [contentTotal, setContentTotal] = useState(0);
-  const [contentType, setContentType] = useState<'topic' | 'post'>('topic');
-  const [jobPage, setJobPage] = useState(1);
-  const [jobTotal, setJobTotal] = useState(0);
-  const [logPage, setLogPage] = useState(1);
-  const [logTotal, setLogTotal] = useState(0);
-
-  const load = async () => {
-    setBusy(true); setError('');
-    try {
-      const [overviewRes, usersRes, contentRes, jobsRes, logsRes, categoriesRes] = await Promise.all([
-        adminApi.overview(), adminApi.users({ page: userPage, page_size: PAGE_SIZE }), adminApi.contents(contentType, { page: contentPage, page_size: PAGE_SIZE }), adminApi.llmJobs({ page: jobPage, page_size: PAGE_SIZE }), adminApi.trustLogs({ page: logPage, page_size: PAGE_SIZE }), adminApi.categories(),
-      ]);
-      setOverview(overviewRes.data); setUsers(usersRes.data.items); setUserTotal(usersRes.data.total); setContents(contentRes.data.items); setContentTotal(contentRes.data.total);
-      setJobs(jobsRes.data.items); setJobTotal(jobsRes.data.total); setLogs(logsRes.data.items); setLogTotal(logsRes.data.total); setCategories(categoriesRes.data);
-    } catch (err: unknown) { setError(getErrorMessage(err, '管理数据加载失败')); }
-    finally { setBusy(false); }
-  };
-
-  useEffect(() => {
-    if (isLoading || user?.role !== 'admin') return;
-    let cancelled = false;
-    Promise.all([adminApi.overview(), adminApi.users({ page: userPage, page_size: PAGE_SIZE }), adminApi.contents(contentType, { page: contentPage, page_size: PAGE_SIZE }), adminApi.llmJobs({ page: jobPage, page_size: PAGE_SIZE }), adminApi.trustLogs({ page: logPage, page_size: PAGE_SIZE }), adminApi.categories()])
-      .then(([overviewRes, usersRes, contentRes, jobsRes, logsRes, categoriesRes]) => {
-        if (cancelled) return;
-        setOverview(overviewRes.data); setUsers(usersRes.data.items); setUserTotal(usersRes.data.total); setContents(contentRes.data.items); setContentTotal(contentRes.data.total);
-        setJobs(jobsRes.data.items); setJobTotal(jobsRes.data.total); setLogs(logsRes.data.items); setLogTotal(logsRes.data.total); setCategories(categoriesRes.data);
-      })
-      .catch((err: unknown) => { if (!cancelled) setError(getErrorMessage(err, '管理数据加载失败')); });
-    return () => { cancelled = true; };
-  }, [contentPage, contentType, isLoading, jobPage, logPage, user, userPage]);
-
-  const run = async (action: () => Promise<unknown>) => { setBusy(true); setError(''); try { await action(); await load(); } catch (err: unknown) { setError(getErrorMessage(err, '治理操作失败')); setBusy(false); } };
-  const saveCategory = (category: Category, changes: Partial<Category>) => run(() => adminApi.updateCategory(category.id, { name: category.name, slug: category.slug, description: category.description, sort_order: category.sort_order, is_active: category.is_active, requires_review: category.requires_review, ...changes }));
-  const createCategory = async (event: React.FormEvent) => {
-    event.preventDefault();
-    await run(() => adminApi.createCategory({ ...newCategory, sort_order: categories.length, is_active: true, requires_review: false }));
-    setNewCategory({ name: '', slug: '', description: '' });
-  };
-
-  if (isLoading) return <div className="mx-auto h-48 max-w-7xl animate-pulse rounded-xl bg-stone-200" />;
-  if (user?.role !== 'admin') return <div className="paper-card mx-auto max-w-3xl rounded-xl p-10 text-center">此页面仅管理员可访问。</div>;
-
-  const cards = overview ? [
-    ['用户', overview.users_total], ['主题', overview.topics_total], ['回复', overview.posts_total], ['7 日活跃', overview.active_users_7_days],
-    ['盲审完成', `${overview.review_completed}/${overview.review_total}`], ['LLM 成功', `${overview.llm_success}/${overview.llm_calls}`], ['平均延迟', `${Math.round(overview.llm_average_ms)} ms`], ['Token', overview.llm_prompt_tokens + overview.llm_output_tokens],
-  ] : [];
-
-  return (
-    <div className="mx-auto max-w-7xl space-y-8 text-sm">
-      <header className="flex items-center justify-between"><div><h1 className="text-2xl font-bold">社区治理后台</h1><p className="mt-1 text-[var(--text-muted)]">统计观察与轻量治理；管理员不能修改用户正文。</p></div><button disabled={busy} onClick={() => void load()} className="rounded border px-3 py-2 disabled:opacity-50">刷新</button></header>
-      {error && <div className="rounded border border-red-200 bg-red-50 p-3 text-red-700">{error}</div>}
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">{cards.map(([label, value]) => <div key={label} className="paper-card rounded-xl p-4"><p className="text-xs text-[var(--text-muted)]">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></div>)}</section>
-
-      {overview && <section className="paper-card rounded-xl p-5"><h2 className="font-bold">近 7 日新增趋势</h2><div className="mt-4 grid grid-cols-7 items-end gap-2">{overview.trend.map((day) => { const total = day.users + day.topics + day.posts + day.feedback; return <div key={day.date} className="text-center"><div title={`用户 ${day.users} / 主题 ${day.topics} / 回复 ${day.posts} / 反馈 ${day.feedback}`} style={{ height: `${Math.max(8, Math.min(120, total * 8))}px` }} className="mx-auto w-8 rounded-t bg-[var(--accent-ink)] opacity-75" /><p className="mt-1 text-[10px] text-[var(--text-muted)]">{day.date.slice(5)}</p></div>; })}</div><div className="mt-4 flex flex-wrap gap-4 text-xs"><span>内容状态：{Object.entries(overview.content_status).map(([key, value]) => `${key} ${value}`).join(' · ') || '无'}</span><span>信任分布：{Object.entries(overview.trust_distribution).map(([key, value]) => `${key} ${value}`).join(' · ') || '无'}</span></div></section>}
-
-      <AdminSection title="用户与信任">
-        <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr><Th>用户</Th><Th>角色/状态</Th><Th>等级</Th><Th>信任分</Th><Th>有效阅读</Th><Th>操作</Th></tr></thead><tbody>{users.map((item) => <tr key={item.id} className="border-t"><Td>{item.username}<div className="text-xs text-[var(--text-muted)]">{item.email}</div></Td><Td>{item.role} / {item.status}</Td><Td>L{item.unlock_level}</Td><Td>{item.trust_score}</Td><Td>{item.verified_read_seconds}s</Td><Td>{item.id !== user.id && <button disabled={busy} onClick={() => void run(() => adminApi.setUserStatus(item.id, item.status === 'active' ? 'suspended' : 'active'))} className="underline">{item.status === 'active' ? '停用' : '恢复'}</button>}</Td></tr>)}</tbody></table></div>
-        <div className="mt-4"><Pagination page={userPage} pageSize={PAGE_SIZE} total={userTotal} onPageChange={setUserPage} itemLabel="个用户" disabled={busy} /></div>
-        <h3 className="mt-6 font-semibold">最近信任流水</h3><div className="mt-2 space-y-2">{logs.slice(0, 20).map((log) => <div key={log.id} className="rounded bg-stone-50 p-2"><strong>{log.username}</strong> <span className={log.score_delta >= 0 ? 'text-emerald-700' : 'text-red-700'}>{log.score_delta >= 0 ? '+' : ''}{log.score_delta}</span> · {log.event_type}<span className="ml-2 text-xs text-[var(--text-muted)]">{log.reason}</span></div>)}</div>
-        <div className="mt-4"><Pagination page={logPage} pageSize={PAGE_SIZE} total={logTotal} onPageChange={setLogPage} itemLabel="条信任流水" disabled={busy} /></div>
-      </AdminSection>
-
-      <AdminSection title="内容状态与可见性">
-        <div className="mb-4 flex gap-2"><button onClick={() => { setContentType('topic'); setContentPage(1); }} className={`rounded px-3 py-1.5 ${contentType === 'topic' ? 'bg-stone-800 text-white' : 'bg-stone-100'}`}>主题</button><button onClick={() => { setContentType('post'); setContentPage(1); }} className={`rounded px-3 py-1.5 ${contentType === 'post' ? 'bg-stone-800 text-white' : 'bg-stone-100'}`}>回复</button></div>
-        <div className="space-y-2">{contents.map((item) => <div key={`${item.type}-${item.id}`} className="flex items-center justify-between gap-4 rounded border p-3"><div><strong>{item.type === 'topic' ? '主题' : '回复'} · {item.title}</strong><p className="mt-1 line-clamp-1 text-xs text-[var(--text-muted)]">{item.author_name} · {item.status} · {item.excerpt}</p></div>{['published', 'hidden'].includes(item.status) && <button disabled={busy} onClick={() => void run(() => adminApi.setContentVisibility(item.type, item.id, item.status !== 'hidden'))} className="shrink-0 underline">{item.status === 'hidden' ? '恢复' : '隐藏'}</button>}</div>)}</div>
-        <div className="mt-4"><Pagination page={contentPage} pageSize={PAGE_SIZE} total={contentTotal} onPageChange={setContentPage} itemLabel={contentType === 'topic' ? '个主题' : '条回复'} disabled={busy} /></div>
-      </AdminSection>
-
-      <AdminSection title="分类管理">
-        <form onSubmit={createCategory} className="mb-4 grid gap-2 md:grid-cols-4"><input required minLength={2} value={newCategory.name} onChange={(event) => setNewCategory({ ...newCategory, name: event.target.value })} placeholder="分类名称" className="rounded border p-2" /><input required minLength={2} value={newCategory.slug} onChange={(event) => setNewCategory({ ...newCategory, slug: event.target.value })} placeholder="slug" className="rounded border p-2" /><input value={newCategory.description} onChange={(event) => setNewCategory({ ...newCategory, description: event.target.value })} placeholder="说明" className="rounded border p-2" /><button disabled={busy} className="paper-btn-primary rounded p-2">新增分类</button></form>
-        <div className="space-y-2">{categories.map((category) => <div key={category.id} className="flex flex-wrap items-center justify-between gap-2 rounded border p-3"><span><strong>{category.name}</strong> / {category.slug} · 排序 {category.sort_order}</span><div className="space-x-3"><button disabled={busy} onClick={() => void saveCategory(category, { requires_review: !category.requires_review })} className="underline">{category.requires_review ? '取消高争议' : '设为高争议'}</button><button disabled={busy} onClick={() => void saveCategory(category, { is_active: !category.is_active })} className="underline">{category.is_active ? '停用' : '启用'}</button></div></div>)}</div>
-      </AdminSection>
-
-      <AdminSection title="LLM 作业与失败重试">
-        <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr><Th>类型</Th><Th>状态</Th><Th>模型</Th><Th>延迟</Th><Th>Token</Th><Th>错误/操作</Th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id} className="border-t"><Td>{job.job_type}</Td><Td>{job.status}</Td><Td>{job.model}</Td><Td>{job.latency_ms}ms</Td><Td>{job.prompt_tokens + job.completion_tokens}</Td><Td><span className="text-xs text-red-700">{job.error_message}</span>{job.status === 'failed' && <button disabled={busy} onClick={() => void run(() => adminApi.retryLLMJob(job.id))} className="ml-2 underline">安全重试</button>}</Td></tr>)}</tbody></table></div>
-        <div className="mt-4"><Pagination page={jobPage} pageSize={PAGE_SIZE} total={jobTotal} onPageChange={setJobPage} itemLabel="个 LLM 作业" disabled={busy} /></div>
-      </AdminSection>
-    </div>
-  );
+export default function AdminDashboard() {
+  const [data, setData] = useState<AdminOverview | null>(null); const [days, setDays] = useState(7); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
+  useEffect(() => { let cancelled=false; adminApi.overview(days).then(r => { if(!cancelled) setData(r.data); }).catch(e => { if(!cancelled) setError(getErrorMessage(e,'统计数据加载失败')); }).finally(() => { if(!cancelled) setLoading(false); }); return () => { cancelled=true; }; }, [days]);
+  if (loading && !data) return <div className="h-56 animate-pulse rounded-2xl bg-white" />;
+  const cards = data ? [['用户总数',data.users_total],['今日新增',data.new_users_today],['7 日活跃',data.active_users_7_days],['主题 / 回复',`${data.topics_total} / ${data.posts_total}`],['语境反馈',data.feedback_total],['收藏记录',data.bookmarks_total],['有效阅读',`${data.verified_read_hours.toFixed(1)} h`],['停用账号',data.suspended_users]] : [];
+  const max = Math.max(1,...(data?.trend.map(x=>x.users+x.topics+x.posts+x.feedback)||[1]));
+  return <div className="mx-auto max-w-7xl space-y-6"><PageTitle title="运营总览" subtitle="社区增长、参与质量、治理状态与模型运行情况" />
+    {error && <Notice>{error}</Notice>}
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([k,v])=><Metric key={k} label={String(k)} value={v}/>)}</section>
+    {data && <><section className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center justify-between"><div><h2 className="font-semibold">内容与互动趋势</h2><p className="text-xs text-slate-500">用户、主题、回复和反馈的每日新增总和</p></div><div className="flex gap-1">{[7,30,90].map(x=><button key={x} onClick={()=>setDays(x)} className={`rounded-lg px-3 py-1.5 text-xs ${days===x?'bg-slate-900 text-white':'bg-slate-100'}`}>{x} 天</button>)}</div></div><div className="mt-8 flex h-52 items-end gap-1 overflow-hidden">{data.trend.map(day=>{const total=day.users+day.topics+day.posts+day.feedback;return <div key={day.date} className="group flex min-w-2 flex-1 flex-col items-center justify-end" title={`${day.date}：${total} 次新增`}><div className="w-full max-w-8 rounded-t bg-cyan-500 transition hover:bg-cyan-400" style={{height:`${Math.max(4,total/max*170)}px`}}/><span className="mt-2 hidden text-[9px] text-slate-400 sm:block">{data.trend.length<=30?day.date.slice(5):''}</span></div>})}</div></section>
+    <div className="grid gap-6 xl:grid-cols-2"><Breakdown title="用户等级分布" data={data.level_distribution}/><Breakdown title="信任分分布" data={data.trust_distribution}/><Breakdown title="反馈标签分布" data={data.feedback_distribution}/><section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">分类内容规模</h2><div className="mt-4 space-y-3">{data.categories.map(x=><div key={x.name} className="flex items-center justify-between border-b border-slate-100 pb-2 text-sm"><span>{x.name}</span><span className="text-slate-500">{x.topics} 主题 · {x.posts} 回复</span></div>)}</div></section></div>
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="盲审完成率" value={percent(data.review_completed,data.review_total)}/><Metric label="盲审超时" value={data.review_expired}/><Metric label="LLM 成功率" value={percent(data.llm_success,data.llm_calls)}/><Metric label="LLM 平均延迟 / Token" value={`${Math.round(data.llm_average_ms)} ms / ${data.llm_prompt_tokens+data.llm_output_tokens}`}/></section></>}
+  </div>;
 }
 
-function AdminSection({ title, children }: { title: string; children: React.ReactNode }) { return <section className="paper-card rounded-xl p-5"><h2 className="mb-4 font-bold">{title}</h2>{children}</section>; }
-function Th({ children }: { children: React.ReactNode }) { return <th className="p-2 text-xs text-[var(--text-muted)]">{children}</th>; }
-function Td({ children }: { children: React.ReactNode }) { return <td className="p-2 align-top">{children}</td>; }
+function Metric({label,value}:{label:string;value:React.ReactNode}){return <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-2xl font-bold tracking-tight">{value}</p></div>}
+function Breakdown({title,data}:{title:string;data:Record<string,number>}){const total=Math.max(1,Object.values(data).reduce((a,b)=>a+b,0));return <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">{title}</h2><div className="mt-4 space-y-3">{Object.entries(data).map(([k,v])=><div key={k}><div className="flex justify-between text-xs"><span>{k}</span><span>{v}</span></div><div className="mt-1 h-2 rounded bg-slate-100"><div className="h-2 rounded bg-cyan-500" style={{width:`${v/total*100}%`}}/></div></div>)}</div></section>}
+function percent(a:number,b:number){return b?`${(a/b*100).toFixed(1)}%`:'—'}

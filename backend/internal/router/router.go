@@ -45,6 +45,7 @@ func SetupRouter(cfg *config.Config, store *cache.Store, database *sql.DB, h *Ha
 		{
 			auth.POST("/register", h.UserHandler.Register)
 			auth.POST("/login", h.UserHandler.Login)
+			auth.POST("/admin/verify-email", h.UserHandler.VerifyAdminEmail)
 		}
 
 		v1.GET("/categories", h.CategoryHandler.ListCategories)

@@ -14,12 +14,20 @@ type AdminDAO struct{ db *sql.DB }
 
 func NewAdminDAO(db *sql.DB) *AdminDAO { return &AdminDAO{db: db} }
 
-func (d *AdminDAO) Overview(ctx context.Context) (*model.AdminOverview, error) {
-	result := &model.AdminOverview{ContentStatus: map[string]int64{}, TrustDistribution: map[string]int64{}, Trend: make([]model.AdminDailyTrend, 0)}
+func (d *AdminDAO) Overview(ctx context.Context, days int) (*model.AdminOverview, error) {
+	result := &model.AdminOverview{ContentStatus: map[string]int64{}, TrustDistribution: map[string]int64{}, LevelDistribution: map[string]int64{}, FeedbackDistribution: map[string]int64{}, Trend: make([]model.AdminDailyTrend, 0), Categories: make([]model.AdminCategoryStat, 0), TrendDays: days}
 	if err := d.db.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM users),(SELECT COUNT(*) FROM topics),(SELECT COUNT(*) FROM posts)`).Scan(&result.UsersTotal, &result.TopicsTotal, &result.PostsTotal); err != nil {
 		return nil, err
 	}
 	if err := d.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT user_id) FROM (SELECT user_id FROM topics WHERE created_at>=CURRENT_TIMESTAMP-INTERVAL '7 days' UNION ALL SELECT user_id FROM posts WHERE created_at>=CURRENT_TIMESTAMP-INTERVAL '7 days' UNION ALL SELECT user_id FROM contextual_feedbacks WHERE created_at>=CURRENT_TIMESTAMP-INTERVAL '7 days') a`).Scan(&result.ActiveUsers7Days); err != nil {
+		return nil, err
+	}
+	if err := d.db.QueryRowContext(ctx, `SELECT
+		(SELECT COUNT(*) FROM users WHERE created_at>=CURRENT_DATE),
+		(SELECT COUNT(*) FROM contextual_feedbacks WHERE status='active'),
+		(SELECT COUNT(*) FROM bookmarks),
+		(SELECT COUNT(*) FROM users WHERE status='suspended'),
+		(SELECT COALESCE(SUM(verified_read_seconds),0)/3600.0 FROM user_trust_profiles)`).Scan(&result.NewUsersToday, &result.FeedbackTotal, &result.BookmarksTotal, &result.SuspendedUsers, &result.VerifiedReadHours); err != nil {
 		return nil, err
 	}
 	rows, err := d.db.QueryContext(ctx, `SELECT status,COUNT(*) FROM (SELECT status FROM topics UNION ALL SELECT status FROM posts) c GROUP BY status`)
@@ -34,6 +42,34 @@ func (d *AdminDAO) Overview(ctx context.Context) (*model.AdminOverview, error) {
 			return nil, err
 		}
 		result.ContentStatus[key] = count
+	}
+	rows.Close()
+	rows, err = d.db.QueryContext(ctx, `SELECT 'L'||unlock_level::text,COUNT(*) FROM user_trust_profiles GROUP BY unlock_level ORDER BY unlock_level`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var key string
+		var count int64
+		if err = rows.Scan(&key, &count); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		result.LevelDistribution[key] = count
+	}
+	rows.Close()
+	rows, err = d.db.QueryContext(ctx, `SELECT tag,COUNT(*) FROM contextual_feedbacks WHERE status='active' GROUP BY tag ORDER BY COUNT(*) DESC`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var key string
+		var count int64
+		if err = rows.Scan(&key, &count); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		result.FeedbackDistribution[key] = count
 	}
 	rows.Close()
 	rows, err = d.db.QueryContext(ctx, `SELECT CASE WHEN trust_score<0 THEN 'negative' WHEN trust_score<20 THEN '0-19' WHEN trust_score<50 THEN '20-49' ELSE '50+' END,COUNT(*) FROM user_trust_profiles GROUP BY 1 ORDER BY 1`)
@@ -59,7 +95,7 @@ func (d *AdminDAO) Overview(ctx context.Context) (*model.AdminOverview, error) {
 	if err = d.db.QueryRowContext(ctx, `SELECT COUNT(*),COUNT(*) FILTER(WHERE status='completed'),COALESCE(AVG(latency_ms) FILTER(WHERE status='completed'),0),COALESCE(SUM(prompt_tokens),0),COALESCE(SUM(completion_tokens),0) FROM llm_jobs`).Scan(&result.LLMCalls, &result.LLMSuccess, &result.LLMAverageMS, &result.LLMPromptTokens, &result.LLMOutputTokens); err != nil {
 		return nil, err
 	}
-	rows, err = d.db.QueryContext(ctx, `SELECT to_char(day,'YYYY-MM-DD'),(SELECT COUNT(*) FROM users WHERE created_at>=day AND created_at<day+INTERVAL '1 day'),(SELECT COUNT(*) FROM topics WHERE created_at>=day AND created_at<day+INTERVAL '1 day'),(SELECT COUNT(*) FROM posts WHERE created_at>=day AND created_at<day+INTERVAL '1 day'),(SELECT COUNT(*) FROM contextual_feedbacks WHERE created_at>=day AND created_at<day+INTERVAL '1 day') FROM generate_series(CURRENT_DATE-6,CURRENT_DATE,INTERVAL '1 day') day`)
+	rows, err = d.db.QueryContext(ctx, `SELECT to_char(day,'YYYY-MM-DD'),(SELECT COUNT(*) FROM users WHERE created_at>=day AND created_at<day+INTERVAL '1 day'),(SELECT COUNT(*) FROM topics WHERE created_at>=day AND created_at<day+INTERVAL '1 day'),(SELECT COUNT(*) FROM posts WHERE created_at>=day AND created_at<day+INTERVAL '1 day'),(SELECT COUNT(*) FROM contextual_feedbacks WHERE created_at>=day AND created_at<day+INTERVAL '1 day') FROM generate_series(CURRENT_DATE-($1::int-1),CURRENT_DATE,INTERVAL '1 day') day`, days)
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +106,21 @@ func (d *AdminDAO) Overview(ctx context.Context) (*model.AdminOverview, error) {
 			return nil, err
 		}
 		result.Trend = append(result.Trend, item)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	rows, err = d.db.QueryContext(ctx, `SELECT c.name,COUNT(DISTINCT t.id),COUNT(p.id) FROM categories c LEFT JOIN topics t ON t.category_id=c.id LEFT JOIN posts p ON p.topic_id=t.id GROUP BY c.id,c.name,c.sort_order ORDER BY c.sort_order,c.id`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var item model.AdminCategoryStat
+		if err = rows.Scan(&item.Name, &item.Topics, &item.Posts); err != nil {
+			return nil, err
+		}
+		result.Categories = append(result.Categories, item)
 	}
 	return result, rows.Err()
 }

@@ -7,6 +7,7 @@ import {
   AdminTrustLog,
   AdminUser,
   AuthData,
+  LoginData,
   Bookmark,
   Category,
   CommentCluster,
@@ -37,7 +38,9 @@ export const authApi = {
   register: (data: Record<string, string>) =>
     api.post<ApiResponse<AuthData>, ApiResponse<AuthData>>('/auth/register', data),
   login: (data: Record<string, string>) =>
-    api.post<ApiResponse<AuthData>, ApiResponse<AuthData>>('/auth/login', data),
+    api.post<ApiResponse<LoginData>, ApiResponse<LoginData>>('/auth/login', data),
+  verifyAdminEmail: (data: { challenge_id: string; code: string }) =>
+    api.post<ApiResponse<AuthData>, ApiResponse<AuthData>>('/auth/admin/verify-email', data),
   getMe: () =>
     api.get<ApiResponse<UserProfile>, ApiResponse<UserProfile>>('/users/me'),
   saveOnboarding: (data: { statement: string; background_tag: string }) =>
@@ -114,7 +117,7 @@ export const reviewApi = {
 };
 
 export const adminApi = {
-  overview: () => api.get<ApiResponse<AdminOverview>, ApiResponse<AdminOverview>>('/admin/overview'),
+  overview: (days = 7) => api.get<ApiResponse<AdminOverview>, ApiResponse<AdminOverview>>('/admin/overview', { params: { days } }),
   users: (params?: { page?: number; page_size?: number }) => api.get<ApiResponse<PageData<AdminUser>>, ApiResponse<PageData<AdminUser>>>('/admin/users', { params }),
   setUserStatus: (id: number, status: 'active' | 'suspended') => api.patch<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/admin/users/${id}/status`, { status }),
   contents: (type: 'topic' | 'post', params?: { page?: number; page_size?: number; status?: string }) => api.get<ApiResponse<PageData<AdminContent>>, ApiResponse<PageData<AdminContent>>>('/admin/contents', { params: { type, ...params } }),

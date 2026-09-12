@@ -13,6 +13,7 @@ func OptionalJWT(jwtSecret string) gin.HandlerFunc {
 		if len(parts) == 2 && parts[0] == "Bearer" {
 			if claims, err := jwt.ParseToken(parts[1], jwtSecret); err == nil {
 				c.Set("userID", claims.UserID)
+				c.Set("adminVerified", claims.AdminVerified)
 			}
 		}
 		c.Next()

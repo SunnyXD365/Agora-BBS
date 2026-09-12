@@ -4,12 +4,44 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"agora-backend/internal/model"
 )
 
 type UserDAO struct {
 	db *sql.DB
+}
+
+func (d *UserDAO) CreateAdminLoginChallenge(ctx context.Context, id string, userID int64, codeHash string, expiresAt time.Time) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `DELETE FROM admin_login_challenges WHERE user_id=$1 AND consumed_at IS NULL`, userID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO admin_login_challenges(id,user_id,code_hash,expires_at) VALUES($1,$2,$3,$4)`, id, userID, codeHash, expiresAt); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (d *UserDAO) DeleteAdminLoginChallenge(ctx context.Context, id string) error {
+	_, err := d.db.ExecContext(ctx, `DELETE FROM admin_login_challenges WHERE id=$1`, id)
+	return err
+}
+
+func (d *UserDAO) ConsumeAdminLoginChallenge(ctx context.Context, id, codeHash string) (int64, bool, error) {
+	var userID int64
+	var valid bool
+	err := d.db.QueryRowContext(ctx, `
+		UPDATE admin_login_challenges
+		SET attempts=attempts+1, consumed_at=CASE WHEN code_hash=$2 THEN CURRENT_TIMESTAMP ELSE consumed_at END
+		WHERE id=$1 AND consumed_at IS NULL AND expires_at>CURRENT_TIMESTAMP AND attempts<5
+		RETURNING user_id,code_hash=$2`, id, codeHash).Scan(&userID, &valid)
+	return userID, valid, err
 }
 
 func NewUserDAO(db *sql.DB) *UserDAO {

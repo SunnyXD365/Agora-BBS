@@ -24,7 +24,8 @@ func adminPage(c *gin.Context) (int, int) {
 func adminID(c *gin.Context) (int64, error) { return strconv.ParseInt(c.Param("id"), 10, 64) }
 
 func (h *AdminHandler) Overview(c *gin.Context) {
-	data, err := h.service.Overview(c.Request.Context())
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "7"))
+	data, err := h.service.Overview(c.Request.Context(), days)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, 50090, "failed to load administrator overview")
 		return

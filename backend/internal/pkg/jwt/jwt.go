@@ -8,14 +8,23 @@ import (
 )
 
 type CustomClaims struct {
-	UserID int64 `json:"user_id"`
+	UserID        int64 `json:"user_id"`
+	AdminVerified bool  `json:"admin_verified,omitempty"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken 生成 JWT Token
 func GenerateToken(userID int64, secret string, expireHours int) (string, error) {
+	return generateToken(userID, false, secret, expireHours)
+}
+
+func GenerateAdminToken(userID int64, secret string, expireHours int) (string, error) {
+	return generateToken(userID, true, secret, expireHours)
+}
+
+func generateToken(userID int64, adminVerified bool, secret string, expireHours int) (string, error) {
 	claims := CustomClaims{
-		UserID: userID,
+		UserID: userID, AdminVerified: adminVerified,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expireHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

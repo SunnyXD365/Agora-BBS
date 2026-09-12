@@ -39,6 +39,21 @@ type LoginReq struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type VerifyAdminEmailReq struct {
+	ChallengeID string `json:"challenge_id" binding:"required,min=32,max=64"`
+	Code        string `json:"code" binding:"required,len=6,numeric"`
+}
+
+type LoginResp struct {
+	Token                       string `json:"token,omitempty"`
+	User                        *User  `json:"user,omitempty"`
+	RequiresEmailVerification   bool   `json:"requires_email_verification"`
+	ChallengeID                 string `json:"challenge_id,omitempty"`
+	MaskedEmail                 string `json:"masked_email,omitempty"`
+	ExpiresInSeconds            int    `json:"expires_in_seconds,omitempty"`
+	DevelopmentVerificationCode string `json:"development_verification_code,omitempty"`
+}
+
 // AuthResp 认证成功响应 DTO
 type AuthResp struct {
 	Token string `json:"token"`
