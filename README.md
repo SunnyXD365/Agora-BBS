@@ -18,7 +18,7 @@ Get-Content backend/seed.sql -Raw | docker exec -i agora-postgres psql -U agora_
 
 普通用户和管理员共用 `/login`。管理员密码正确后还需完成邮箱验证码，随后自动进入独立的 `/admin` 管理端；开发环境未配置 SMTP 时登录页会提供本地演示码，生产环境必须配置 SMTP。
 
-开发 Seed 账号的密码均为 `password`：`demo_admin`、`demo_l0`、`demo_l1`、`demo_l2`、`demo_l3_a`、`demo_l3_b`、`demo_l3_c`。Seed 仅用于本地，生产环境使用 `backend` 镜像内的 `/app/admin` 命令提升已有用户。
+开发 Seed 管理员 `admin` 的密码为 `admin123`，其余演示账号密码均为 `password`：`demo_admin`、`demo_l0`、`demo_l1`、`demo_l2`、`demo_l3_a`、`demo_l3_b`、`demo_l3_c`。Seed 仅用于本地，生产环境使用 `backend` 镜像内的 `/app/admin` 命令提升已有用户。
 
 ## 架构
 
