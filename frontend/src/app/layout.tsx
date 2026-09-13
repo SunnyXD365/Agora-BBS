@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { AuthProvider } from '@/context/AuthContext';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -17,10 +17,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">
         <AuthProvider>
-          <Navbar />
-          <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            {children}
-          </main>
+          <AppShell>{children}</AppShell>
         </AuthProvider>
       </body>
     </html>

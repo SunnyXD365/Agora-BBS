@@ -3,9 +3,9 @@ package handler
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-	"agora-backend/internal/service"
 	"agora-backend/internal/pkg/response"
+	"agora-backend/internal/service"
+	"github.com/gin-gonic/gin"
 )
 
 type CategoryHandler struct {

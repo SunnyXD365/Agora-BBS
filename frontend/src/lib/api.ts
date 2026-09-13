@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || '/api/v1',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -26,8 +26,12 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
+    const requiresAdminReverification = error.response?.data?.code === 40391;
+    if ((error.response?.status === 401 || requiresAdminReverification) && typeof window !== 'undefined') {
       localStorage.removeItem('token');
+      if (requiresAdminReverification && window.location.pathname.startsWith('/admin')) {
+        window.dispatchEvent(new Event('agora:admin-reverification-required'));
+      }
     }
     return Promise.reject(error.response?.data || error);
   }

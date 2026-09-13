@@ -1,12 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"agora-backend/internal/model"
-	"agora-backend/internal/service"
 	"agora-backend/internal/pkg/response"
+	"agora-backend/internal/service"
+	"github.com/gin-gonic/gin"
 )
 
 type UserHandler struct {
@@ -42,10 +43,28 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 	resp, err := h.userService.Login(c.Request.Context(), &req)
 	if err != nil {
+		if errors.Is(err, service.ErrAdminEmailUnavailable) {
+			response.Error(c, http.StatusServiceUnavailable, 50301, "administrator email service unavailable")
+			return
+		}
 		response.Error(c, http.StatusUnauthorized, 40104, err.Error())
 		return
 	}
 
+	response.Success(c, resp)
+}
+
+func (h *UserHandler) VerifyAdminEmail(c *gin.Context) {
+	var req model.VerifyAdminEmailReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, 40003, "invalid verification request")
+		return
+	}
+	resp, err := h.userService.VerifyAdminEmail(c.Request.Context(), &req)
+	if err != nil {
+		response.Error(c, http.StatusUnauthorized, 40105, "invalid or expired administrator verification code")
+		return
+	}
 	response.Success(c, resp)
 }
 

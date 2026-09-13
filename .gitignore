@@ -21,6 +21,11 @@ frontend/build/
 frontend/*.log
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
+tests/e2e/node_modules/
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+tests/load/results/*.json
+!tests/load/results/.gitkeep
 
 # Backend
 backend/tmp/
