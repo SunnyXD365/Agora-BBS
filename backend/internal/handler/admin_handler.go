@@ -34,9 +34,38 @@ func (h *AdminHandler) Overview(c *gin.Context) {
 }
 func (h *AdminHandler) Users(c *gin.Context) {
 	page, size := adminPage(c)
-	data, err := h.service.Users(c.Request.Context(), page, size)
+	level := -1
+	if raw := c.Query("level"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			level = parsed
+		}
+	}
+	data, err := h.service.Users(c.Request.Context(), &model.AdminUserQuery{
+		AdminPageQuery: model.AdminPageQuery{Query: c.Query("q"), Sort: c.Query("sort"), Order: c.Query("order"), Page: page, PageSize: size},
+		Level:          level,
+		Role:           c.Query("role"),
+		Status:         c.Query("status"),
+	})
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, 50091, "failed to load users")
+		return
+	}
+	response.Success(c, data)
+}
+func (h *AdminHandler) UpdateUser(c *gin.Context) {
+	id, err := adminID(c)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, 40095, "invalid user id")
+		return
+	}
+	var req model.UpdateAdminUserReq
+	if err = c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, 40096, "invalid user data")
+		return
+	}
+	data, err := h.service.UpdateUser(c.Request.Context(), c.GetInt64("userID"), id, &req)
+	if err != nil {
+		response.Error(c, http.StatusConflict, 40991, err.Error())
 		return
 	}
 	response.Success(c, data)
@@ -62,7 +91,11 @@ func (h *AdminHandler) SetUserStatus(c *gin.Context) {
 }
 func (h *AdminHandler) Contents(c *gin.Context) {
 	page, size := adminPage(c)
-	data, err := h.service.Contents(c.Request.Context(), c.DefaultQuery("type", "topic"), c.Query("status"), page, size)
+	data, err := h.service.Contents(c.Request.Context(), &model.AdminContentQuery{
+		AdminPageQuery: model.AdminPageQuery{Query: c.Query("q"), Sort: c.Query("sort"), Order: c.Query("order"), Page: page, PageSize: size},
+		Kind:           c.DefaultQuery("type", "topic"),
+		Status:         c.Query("status"),
+	})
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, 40092, err.Error())
 		return
@@ -90,7 +123,10 @@ func (h *AdminHandler) SetContentVisibility(c *gin.Context) {
 }
 func (h *AdminHandler) LLMJobs(c *gin.Context) {
 	page, size := adminPage(c)
-	data, err := h.service.LLMJobs(c.Request.Context(), c.Query("status"), page, size)
+	data, err := h.service.LLMJobs(c.Request.Context(), &model.AdminLLMJobQuery{
+		AdminPageQuery: model.AdminPageQuery{Query: c.Query("q"), Sort: c.Query("sort"), Order: c.Query("order"), Page: page, PageSize: size},
+		Status:         c.Query("status"),
+	})
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, 50092, "failed to load LLM jobs")
 		return
@@ -100,7 +136,10 @@ func (h *AdminHandler) LLMJobs(c *gin.Context) {
 func (h *AdminHandler) TrustLogs(c *gin.Context) {
 	page, size := adminPage(c)
 	userID, _ := strconv.ParseInt(c.Query("user_id"), 10, 64)
-	data, err := h.service.TrustLogs(c.Request.Context(), userID, page, size)
+	data, err := h.service.TrustLogs(c.Request.Context(), &model.AdminTrustLogQuery{
+		AdminPageQuery: model.AdminPageQuery{Query: c.Query("q"), Sort: c.Query("sort"), Order: c.Query("order"), Page: page, PageSize: size},
+		UserID:         userID,
+	})
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, 50094, "failed to load trust logs")
 		return
@@ -120,7 +159,7 @@ func (h *AdminHandler) RetryLLMJob(c *gin.Context) {
 	response.Success(c, gin.H{"status": "queued"})
 }
 func (h *AdminHandler) Categories(c *gin.Context) {
-	data, err := h.service.Categories(c.Request.Context())
+	data, err := h.service.Categories(c.Request.Context(), &model.AdminCategoryQuery{Query: c.Query("q"), Sort: c.Query("sort"), Order: c.Query("order")})
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, 50093, "failed to load categories")
 		return

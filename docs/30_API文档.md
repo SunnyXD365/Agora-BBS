@@ -112,13 +112,21 @@ Content-Type: application/json
 
 ## 5. 阅读会话
 
-开始：`POST /reading-sessions`，请求体 `{"topic_id":1}`。每 5 秒发送：
+开始：`POST /reading-sessions`。阅读论坛主题时请求体为 `{"topic_id":1}`；阅读论坛使用手册时为 `{"resource":"forum-guide"}`。主题与系统文档在数据中使用独立的资源类型，不会混淆。每 5 秒发送：
 
 ```json
 {"progress":85,"reply_focused":true}
 ```
 
-进度只允许单调增加，服务端限制每次时间增量。长文必须滚动到底并满足回复区停留时间；完成接口返回 `eligible`。服务端随后根据注册时长、累计阅读、合规互动和信任规则更新等级。
+进度只允许单调增加，服务端限制每次时间增量。普通主题和论坛使用手册滚动到底即可完成；结构化正文总长度不少于公开策略中的 `long_topic_chars`，或分类标记为高争议时，还必须满足回复区停留时间。
+
+开始与心跳响应中的 `requires_reply_dwell` 表示当前主题是否应用停留门槛。完成时应携带浏览器最后状态，页面离开时也可使用同一请求安全收尾：
+
+```json
+{"progress":100,"reply_focused":false}
+```
+
+未满足条件时，完成接口返回 `completed:false`、`eligible:false` 并保留会话供下次续接；满足条件后的首次请求才会幂等汇总有效时长。服务端随后根据注册时长、累计阅读、合规互动、信任分和自述状态更新等级。
 
 ## 6. 语境反馈
 
@@ -147,10 +155,10 @@ Content-Type: application/json
 ## 8. 管理接口
 
 - `GET /admin/overview?days=7|30|90`：增长趋势、用户等级/信任、反馈标签、分类内容规模、盲审和 LLM 汇总。
-- `GET /admin/users`、`PATCH /admin/users/{id}/status`：查看隐藏信任分、停用/恢复账号。
-- `GET /admin/trust-logs`：不可覆盖的信任流水，可按 `user_id` 筛选。
-- `GET /admin/contents?type=topic|post`、`PATCH /admin/contents/{type}/{id}/visibility`：隐藏/恢复；不支持修改正文。
-- `GET/POST/PATCH /admin/categories...`：列出、新增、排序、停用和高争议标记。
-- `GET /admin/llm-jobs`、`POST /admin/llm-jobs/{id}/retry`：用量、错误和失败作业幂等重试。
+- `GET /admin/users`、`PATCH /admin/users/{id}`、`PATCH /admin/users/{id}/status`：查看隐藏信任分，编辑用户名、邮箱、身份、状态、等级和信任分，或快捷停用/恢复账号。完整编辑必须填写调整原因，信任分以差额形式写入不可覆盖的 `admin_user_update` 流水；不能停用当前管理员或取消自己的管理员身份。列表支持用户名/邮箱模糊搜索，按角色、状态、L0–L3 筛选，并按注册时间、用户名、等级、信任分或有效阅读时长排序。
+- `GET /admin/trust-logs`：不可覆盖的信任流水，可按 `user_id` 精确筛选，或模糊搜索用户名、事件、原因和关联类型；支持按时间、分值变化、用户名或事件排序。
+- `GET /admin/contents?type=topic|post`、`PATCH /admin/contents/{type}/{id}/visibility`：隐藏/恢复；不支持修改正文。列表支持搜索标题/正文/作者、状态筛选，以及时间、标题/正文、作者和状态排序。
+- `GET/POST/PATCH /admin/categories...`：列出、新增、排序、停用和高争议标记；列表支持搜索名称、slug、说明，并按手工顺序、名称、状态或创建时间排序。
+- `GET /admin/llm-jobs`、`POST /admin/llm-jobs/{id}/retry`：用量、错误和失败作业幂等重试；列表支持搜索任务/模型/错误/关联对象、状态筛选，以及时间、延迟、Token、重试次数和状态排序。
 
-管理员可通过 `page/page_size` 分页，作业和内容可用 `status` 筛选。
+管理列表的公共查询参数为 `q`（模糊搜索）、`sort`（排序字段）和 `order=asc|desc`。除分类外均支持 `page/page_size` 分页；服务端对排序字段使用白名单，不会将客户端输入直接拼接为 SQL 标识符。

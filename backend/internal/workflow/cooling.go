@@ -99,14 +99,17 @@ func (a *Activities) PublishContent(ctx context.Context, input CoolingInput) (Pu
 			status = "superseded"
 		}
 	} else if input.Kind == "post" {
-		var topicID int64
-		err := tx.QueryRowContext(ctx, `UPDATE posts SET status = 'published', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'cooling' AND cooling_ends_at <= CURRENT_TIMESTAMP RETURNING topic_id`, input.ID).Scan(&topicID)
+		var topicID, authorID int64
+		err := tx.QueryRowContext(ctx, `UPDATE posts SET status = 'published', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'cooling' AND cooling_ends_at <= CURRENT_TIMESTAMP RETURNING topic_id,user_id`, input.ID).Scan(&topicID, &authorID)
 		if errors.Is(err, sql.ErrNoRows) {
 			status = "superseded"
 		} else if err != nil {
 			return PublishResult{}, err
 		} else {
 			if _, err := tx.ExecContext(ctx, `UPDATE topics SET post_count = post_count + 1 WHERE id = $1`, topicID); err != nil {
+				return PublishResult{}, err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE user_trust_profiles SET compliant_interactions = compliant_interactions + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1`, authorID); err != nil {
 				return PublishResult{}, err
 			}
 			resultData.TopicID = topicID

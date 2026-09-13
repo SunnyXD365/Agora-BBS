@@ -99,6 +99,53 @@ type AdminTrustLog struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+type AdminPageQuery struct {
+	Query    string
+	Sort     string
+	Order    string
+	Page     int
+	PageSize int
+}
+
+type AdminUserQuery struct {
+	AdminPageQuery
+	Level  int
+	Role   string
+	Status string
+}
+
+type UpdateAdminUserReq struct {
+	Username    string `json:"username" binding:"required,min=3,max=32"`
+	Email       string `json:"email" binding:"omitempty,email,max=128"`
+	Role        string `json:"role" binding:"required,oneof=user admin"`
+	Status      string `json:"status" binding:"required,oneof=active suspended"`
+	UnlockLevel int    `json:"unlock_level" binding:"min=0,max=3"`
+	TrustScore  int    `json:"trust_score" binding:"min=-1000,max=10000"`
+	Reason      string `json:"reason" binding:"required,min=5,max=200"`
+}
+
+type AdminContentQuery struct {
+	AdminPageQuery
+	Kind   string
+	Status string
+}
+
+type AdminLLMJobQuery struct {
+	AdminPageQuery
+	Status string
+}
+
+type AdminTrustLogQuery struct {
+	AdminPageQuery
+	UserID int64
+}
+
+type AdminCategoryQuery struct {
+	Query string
+	Sort  string
+	Order string
+}
+
 type UpdateCategoryReq struct {
 	Name           string `json:"name" binding:"required,min=2,max=64"`
 	Slug           string `json:"slug" binding:"required,min=2,max=64"`

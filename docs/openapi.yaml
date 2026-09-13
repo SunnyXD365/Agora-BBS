@@ -122,10 +122,10 @@ paths:
   /reading-sessions:
     post:
       tags: [Governance]
-      summary: 开始阅读会话
+      summary: 开始主题或系统手册阅读会话
       security: [bearerAuth: []]
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [topic_id], properties: { topic_id: { type: integer, format: int64 } } } } } }
-      responses: { '200': { $ref: '#/components/responses/Success' } }
+      requestBody: { required: true, content: { application/json: { schema: { oneOf: [ { type: object, required: [topic_id], properties: { topic_id: { type: integer, format: int64, minimum: 1 } }, additionalProperties: false }, { type: object, required: [resource], properties: { resource: { type: string, enum: [forum-guide] } }, additionalProperties: false } ] } } } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/Error' } }
   /reading-sessions/{id}/heartbeat:
     patch:
       tags: [Governance]
@@ -135,7 +135,21 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [progress], properties: { progress: { type: integer, minimum: 0, maximum: 100 }, reply_focused: { type: boolean } } } } } }
       responses: { '200': { $ref: '#/components/responses/Success' } }
   /reading-sessions/{id}/complete:
-    post: { tags: [Governance], summary: 完成阅读会话, security: [bearerAuth: []], parameters: [ { in: path, name: id, required: true, schema: { type: string } } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post:
+      tags: [Governance]
+      summary: 使用最后浏览状态幂等完成或保存阅读会话
+      security: [bearerAuth: []]
+      parameters: [ { in: path, name: id, required: true, schema: { type: string } } ]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                progress: { type: integer, minimum: 0, maximum: 100 }
+                reply_focused: { type: boolean }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' } }
   /feedbacks/summary:
     get: { tags: [Governance], summary: 反馈汇总, parameters: [ { in: query, name: target_type, required: true, schema: { type: string, enum: [topic, post] } }, { in: query, name: target_id, required: true, schema: { type: integer, format: int64 } } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
   /feedbacks:
@@ -162,21 +176,23 @@ paths:
   /admin/overview:
     get: { tags: [Admin], summary: 扩展统计总览, security: [bearerAuth: []], parameters: [ { in: query, name: days, schema: { type: integer, enum: [7, 30, 90], default: 7 } } ], responses: { '200': { $ref: '#/components/responses/Success' }, '403': { $ref: '#/components/responses/Error' } } }
   /admin/users:
-    get: { tags: [Admin], summary: 用户与隐藏信任分, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    get: { tags: [Admin], summary: 用户搜索、筛选、排序与隐藏信任分, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Order' }, { in: query, name: level, schema: { type: integer, minimum: 0, maximum: 3 } }, { in: query, name: role, schema: { type: string, enum: [user, admin] } }, { in: query, name: status, schema: { type: string, enum: [active, suspended] } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /admin/users/{id}:
+    patch: { tags: [Admin], summary: 编辑用户身份、状态、等级与信任分并记录流水, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/ID' } ], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserUpdateRequest' } } } }, responses: { '200': { $ref: '#/components/responses/Success' }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } } }
   /admin/users/{id}/status:
     patch: { tags: [Admin], summary: 停用或恢复用户, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/ID' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
   /admin/trust-logs:
-    get: { tags: [Admin], summary: 信任流水, security: [bearerAuth: []], parameters: [ { in: query, name: user_id, schema: { type: integer, format: int64 } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    get: { tags: [Admin], summary: 信任流水搜索、筛选与排序, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Order' }, { in: query, name: user_id, schema: { type: integer, format: int64 } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
   /admin/contents:
-    get: { tags: [Admin], summary: 内容治理列表, security: [bearerAuth: []], parameters: [ { in: query, name: type, required: true, schema: { type: string, enum: [topic, post] } }, { in: query, name: status, schema: { type: string } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    get: { tags: [Admin], summary: 内容治理搜索、筛选与排序, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Order' }, { in: query, name: type, required: true, schema: { type: string, enum: [topic, post] } }, { in: query, name: status, schema: { type: string } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
   /admin/contents/{type}/{id}/visibility:
     patch: { tags: [Admin], summary: 隐藏或恢复内容, security: [bearerAuth: []], parameters: [ { in: path, name: type, required: true, schema: { type: string, enum: [topic, post] } }, { $ref: '#/components/parameters/ID' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
   /admin/llm-jobs:
-    get: { tags: [Admin], summary: LLM 作业和用量, security: [bearerAuth: []], parameters: [ { in: query, name: status, schema: { type: string } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    get: { tags: [Admin], summary: LLM 作业搜索、筛选、排序和用量, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Order' }, { in: query, name: status, schema: { type: string } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
   /admin/llm-jobs/{id}/retry:
     post: { tags: [Admin], summary: 安全重试失败作业, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/ID' } ], responses: { '200': { $ref: '#/components/responses/Success' }, '409': { $ref: '#/components/responses/Error' } } }
   /admin/categories:
-    get: { tags: [Admin], summary: 包含停用项的分类列表, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    get: { tags: [Admin], summary: 包含停用项的分类搜索与排序, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Order' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
     post: { tags: [Admin], summary: 新增分类, security: [bearerAuth: []], responses: { '200': { $ref: '#/components/responses/Success' } } }
   /admin/categories/{id}:
     patch: { tags: [Admin], summary: 编辑、排序、停用分类, security: [bearerAuth: []], parameters: [ { $ref: '#/components/parameters/ID' } ], responses: { '200': { $ref: '#/components/responses/Success' } } }
@@ -188,6 +204,9 @@ components:
     CategoryID: { in: query, name: category_id, schema: { type: integer, format: int64 } }
     Page: { in: query, name: page, schema: { type: integer, default: 1, minimum: 1 } }
     PageSize: { in: query, name: page_size, schema: { type: integer, default: 20, minimum: 1, maximum: 100 } }
+    Search: { in: query, name: q, description: 模糊搜索词，最多使用前 100 个字符, schema: { type: string, maxLength: 100 } }
+    Sort: { in: query, name: sort, description: 端点允许的排序字段；非法值回退到默认字段, schema: { type: string } }
+    Order: { in: query, name: order, description: 排序方向；省略时使用端点默认值, schema: { type: string, enum: [asc, desc] } }
   schemas:
     Envelope: { type: object, required: [code, msg, data, request_id], properties: { code: { type: integer }, msg: { type: string }, data: {}, request_id: { type: string } } }
     RegisterRequest: { type: object, required: [username, password], properties: { username: { type: string, minLength: 3, maxLength: 32 }, password: { type: string, minLength: 6, maxLength: 32 }, email: { type: string, format: email } } }
@@ -201,6 +220,7 @@ components:
     CreatePostRequest: { type: object, required: [content, post_type], properties: { content: { type: string, minLength: 1 }, parent_id: { type: integer, format: int64 }, post_type: { type: string, enum: [debate, evidence, experience, thanks] } } }
     FeedbackRequest: { type: object, required: [target_type, target_id, stance, tag, reason], properties: { target_type: { type: string, enum: [topic, post] }, target_id: { type: integer, format: int64 }, stance: { type: string, enum: [support, challenge] }, tag: { type: string, enum: [logical, new_perspective, well_sourced, empathetic, factual_concern, reasoning_gap, inappropriate] }, reason: { type: string, minLength: 5, maxLength: 120 } } }
     ReviewRequest: { type: object, required: [appropriateness, sincerity, reason], properties: { appropriateness: { type: boolean }, sincerity: { type: boolean }, reason: { type: string, minLength: 10, maxLength: 500 } } }
+    AdminUserUpdateRequest: { type: object, required: [username, role, status, unlock_level, trust_score, reason], properties: { username: { type: string, minLength: 3, maxLength: 32 }, email: { type: string, format: email, maxLength: 128 }, role: { type: string, enum: [user, admin] }, status: { type: string, enum: [active, suspended] }, unlock_level: { type: integer, minimum: 0, maximum: 3 }, trust_score: { type: integer, minimum: -1000, maximum: 10000 }, reason: { type: string, minLength: 5, maxLength: 200 } } }
   responses:
     Success: { description: 统一成功响应, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }
     Error: { description: 统一错误响应, content: { application/json: { schema: { $ref: '#/components/schemas/Envelope' } } } }

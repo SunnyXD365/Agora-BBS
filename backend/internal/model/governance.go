@@ -13,22 +13,33 @@ type GovernancePolicy struct {
 }
 
 type ReadingSession struct {
-	PublicID          string    `json:"id"`
-	TopicID           int64     `json:"topic_id"`
-	Progress          int       `json:"progress"`
-	ReadingSeconds    int       `json:"reading_seconds"`
-	ReplyDwellSeconds int       `json:"reply_dwell_seconds"`
-	BottomReached     bool      `json:"bottom_reached"`
-	Eligible          bool      `json:"eligible"`
-	Completed         bool      `json:"completed"`
-	LastHeartbeatAt   time.Time `json:"last_heartbeat_at"`
+	PublicID           string    `json:"id"`
+	TopicID            *int64    `json:"topic_id,omitempty"`
+	ResourceType       string    `json:"resource_type"`
+	ResourceKey        string    `json:"resource_key"`
+	Progress           int       `json:"progress"`
+	ReadingSeconds     int       `json:"reading_seconds"`
+	ReplyDwellSeconds  int       `json:"reply_dwell_seconds"`
+	BottomReached      bool      `json:"bottom_reached"`
+	RequiresReplyDwell bool      `json:"requires_reply_dwell"`
+	Eligible           bool      `json:"eligible"`
+	Completed          bool      `json:"completed"`
+	LastHeartbeatAt    time.Time `json:"last_heartbeat_at"`
 }
 
 type StartReadingReq struct {
-	TopicID int64 `json:"topic_id" binding:"required"`
+	TopicID  *int64 `json:"topic_id"`
+	Resource string `json:"resource" binding:"omitempty,max=64"`
 }
 
 type ReadingHeartbeatReq struct {
 	Progress     int  `json:"progress" binding:"min=0,max=100"`
+	ReplyFocused bool `json:"reply_focused"`
+}
+
+// CompleteReadingReq carries the last browser state so pagehide can settle a
+// session in one idempotent request. Progress is optional for old clients.
+type CompleteReadingReq struct {
+	Progress     *int `json:"progress" binding:"omitempty,min=0,max=100"`
 	ReplyFocused bool `json:"reply_focused"`
 }

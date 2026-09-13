@@ -48,7 +48,7 @@ function PostBranch({ node, depth, onReply, onRecall, currentUserID, canFeedback
 export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const topicId = Number(params.id);
   const [topic, setTopic] = useState<Topic | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -68,12 +68,14 @@ export default function TopicDetailPage() {
   const [readingProgress, setReadingProgress] = useState(0);
   const [readingSeconds, setReadingSeconds] = useState(0);
   const [readingEligible, setReadingEligible] = useState(false);
+  const [requiresReplyDwell, setRequiresReplyDwell] = useState(false);
   const [clusters, setClusters] = useState<CommentCluster[]>([]);
   const [selectedCluster, setSelectedCluster] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const progressRef = useRef(0);
   const replyFocusedRef = useRef(false);
   const completionStartedRef = useRef(false);
+  const heartbeatInFlightRef = useRef(false);
   useEffect(() => {
     if (!topicId) return;
     let cancelled = false;
@@ -99,6 +101,8 @@ export default function TopicDetailPage() {
   }, [postPage, postPageSize, topicId]);
 
   useEffect(() => {
+    if (loading) return;
+    progressRef.current = 0;
     const updateProgress = () => {
       const root = document.documentElement;
       const available = root.scrollHeight - window.innerHeight;
@@ -108,38 +112,76 @@ export default function TopicDetailPage() {
     };
     updateProgress();
     window.addEventListener('scroll', updateProgress, { passive: true });
-    return () => window.removeEventListener('scroll', updateProgress);
-  }, []);
+    window.addEventListener('resize', updateProgress);
+    return () => {
+      window.removeEventListener('scroll', updateProgress);
+      window.removeEventListener('resize', updateProgress);
+    };
+  }, [loading, topicId]);
 
+  const publishedTopicID = topic?.status === 'published' ? topic.id : 0;
   useEffect(() => {
-    if (!user || !topic || topic.status !== 'published') return;
+    if (!user?.id || !publishedTopicID) return;
     let cancelled = false;
-    Promise.all([governanceApi.policy(), governanceApi.startReading(topic.id)])
+    completionStartedRef.current = false;
+    Promise.all([governanceApi.policy(), governanceApi.startReading(publishedTopicID)])
       .then(([policyResult, sessionResult]) => {
         if (cancelled) return;
         setPolicy(policyResult.data);
         setReadingSessionID(sessionResult.data.id);
+        setReadingProgress(sessionResult.data.progress);
+        progressRef.current = Math.max(progressRef.current, sessionResult.data.progress);
+        setReadingSeconds(sessionResult.data.reading_seconds);
+        setReadingEligible(sessionResult.data.eligible);
+        setRequiresReplyDwell(sessionResult.data.requires_reply_dwell);
       })
       .catch((err: unknown) => { if (!cancelled) setError(getErrorMessage(err, '阅读计时启动失败')); });
     return () => { cancelled = true; };
-  }, [topic, user]);
+  }, [publishedTopicID, user?.id]);
 
   useEffect(() => {
     if (!readingSessionID || !policy) return;
     const timer = window.setInterval(() => {
+      if (heartbeatInFlightRef.current) return;
+      heartbeatInFlightRef.current = true;
       governanceApi.heartbeat(readingSessionID, progressRef.current, replyFocusedRef.current)
         .then(async (result) => {
           setReadingSeconds(result.data.reading_seconds);
-          if (result.data.bottom_reached && result.data.reply_dwell_seconds >= policy.reply_dwell_seconds && !completionStartedRef.current) {
+          setRequiresReplyDwell(result.data.requires_reply_dwell);
+          const readyToComplete = result.data.bottom_reached
+            && (!result.data.requires_reply_dwell || result.data.reply_dwell_seconds >= policy.reply_dwell_seconds);
+          if (readyToComplete && !completionStartedRef.current) {
             completionStartedRef.current = true;
-            const completed = await governanceApi.completeReading(readingSessionID);
-            setReadingEligible(completed.data.eligible);
+            try {
+              const completed = await governanceApi.completeReading(readingSessionID, progressRef.current, replyFocusedRef.current);
+              setReadingSeconds(completed.data.reading_seconds);
+              setReadingEligible(completed.data.eligible);
+              if (completed.data.completed) {
+                setReadingSessionID('');
+                await refreshUser();
+              } else {
+                completionStartedRef.current = false;
+              }
+            } catch {
+              completionStartedRef.current = false;
+            }
           }
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => { heartbeatInFlightRef.current = false; });
     }, policy.heartbeat_seconds * 1000);
     return () => window.clearInterval(timer);
-  }, [policy, readingSessionID]);
+  }, [policy, readingSessionID, refreshUser]);
+
+  useEffect(() => {
+    if (!readingSessionID) return;
+    const settleReading = () => governanceApi.completeReadingOnPageHide(readingSessionID, progressRef.current, replyFocusedRef.current);
+    window.addEventListener('pagehide', settleReading);
+    return () => {
+      window.removeEventListener('pagehide', settleReading);
+      settleReading();
+    };
+  }, [readingSessionID]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -193,8 +235,7 @@ export default function TopicDetailPage() {
 
   if (loading) return <div className="mx-auto h-48 max-w-4xl animate-pulse rounded-xl bg-stone-200" />;
   if (!topic) return <div className="paper-card rounded-xl p-12 text-center">{error || '该主题不存在或不可见。'}</div>;
-  const contentChars = `${topic.structured_content?.claim ?? topic.content}${topic.structured_content?.evidence ?? ''}${topic.structured_content?.uncertainty ?? ''}`.length;
-  const requiresReading = Boolean(policy && contentChars >= policy.long_topic_chars);
+  const requiresReading = requiresReplyDwell;
   const canReply = Boolean(user?.capabilities.includes('reply')) && (!requiresReading || readingEligible);
   const canFeedback = Boolean(user?.capabilities.includes('feedback'));
   const visiblePosts = selectedCluster ? posts.filter((post) => clusters.find((cluster) => cluster.id === selectedCluster)?.post_ids.includes(post.id)) : posts;
@@ -219,7 +260,7 @@ export default function TopicDetailPage() {
       </article>
       <section className="paper-card rounded-xl p-6">
         <h2 className="text-sm font-bold">发表回复</h2>
-        {user && <div className="mt-3 rounded-md bg-stone-100 p-3 text-xs text-[var(--text-muted)]">阅读进度 {readingProgress}% · 有效阅读 {readingSeconds} 秒{requiresReading && !readingEligible ? ` · 滚动到底并在回复框停留 ${policy?.reply_dwell_seconds ?? 0} 秒后解锁` : ' · 已满足当前阅读要求'}</div>}
+        {user && <div className="mt-3 rounded-md bg-stone-100 p-3 text-xs text-[var(--text-muted)]">阅读进度 {readingProgress}% · 本次有效阅读 {readingSeconds} 秒{readingEligible ? ' · 已完成结算' : requiresReading ? ` · 滚动到底并在回复框停留 ${policy?.reply_dwell_seconds ?? 0} 秒后完成` : ' · 滚动到底后完成'}</div>}
         {replyTo && <div className="mt-3 rounded bg-stone-100 p-2 text-xs">正在回复 {replyTo.author_name}<button onClick={() => setReplyTo(null)} className="ml-2 underline">取消</button></div>}
         <form onSubmit={handleSubmitReply} className="mt-3 space-y-3">
           <select value={replyType} onChange={(event) => setReplyType(event.target.value as Post['post_type'])} disabled={!user} className="rounded-md border p-2 text-sm">{Object.entries(postTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>

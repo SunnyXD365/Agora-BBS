@@ -102,9 +102,23 @@ export const likeApi = {
 export const governanceApi = {
   policy: () => api.get<ApiResponse<GovernancePolicy>, ApiResponse<GovernancePolicy>>('/governance/policy'),
   startReading: (topicId: number) => api.post<ApiResponse<ReadingSession>, ApiResponse<ReadingSession>>('/reading-sessions', { topic_id: topicId }),
+  startResourceReading: (resource: 'forum-guide') => api.post<ApiResponse<ReadingSession>, ApiResponse<ReadingSession>>('/reading-sessions', { resource }),
   heartbeat: (id: string, progress: number, replyFocused: boolean) =>
     api.patch<ApiResponse<ReadingSession>, ApiResponse<ReadingSession>>(`/reading-sessions/${id}/heartbeat`, { progress, reply_focused: replyFocused }),
-  completeReading: (id: string) => api.post<ApiResponse<ReadingSession>, ApiResponse<ReadingSession>>(`/reading-sessions/${id}/complete`),
+  completeReading: (id: string, progress: number, replyFocused: boolean) =>
+    api.post<ApiResponse<ReadingSession>, ApiResponse<ReadingSession>>(`/reading-sessions/${id}/complete`, { progress, reply_focused: replyFocused }),
+  completeReadingOnPageHide: (id: string, progress: number, replyFocused: boolean) => {
+    if (typeof window === 'undefined') return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const baseURL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+    void fetch(`${baseURL}/reading-sessions/${encodeURIComponent(id)}/complete`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ progress, reply_focused: replyFocused }),
+      keepalive: true,
+    }).catch(() => undefined);
+  },
 };
 
 export const bookmarkApi = {
@@ -135,14 +149,15 @@ export const reviewApi = {
 
 export const adminApi = {
   overview: (days = 7) => api.get<ApiResponse<AdminOverview>, ApiResponse<AdminOverview>>('/admin/overview', { params: { days } }),
-  users: (params?: { page?: number; page_size?: number }) => api.get<ApiResponse<PageData<AdminUser>>, ApiResponse<PageData<AdminUser>>>('/admin/users', { params }),
+  users: (params?: { q?: string; level?: number; role?: string; status?: string; sort?: string; order?: 'asc' | 'desc'; page?: number; page_size?: number }) => api.get<ApiResponse<PageData<AdminUser>>, ApiResponse<PageData<AdminUser>>>('/admin/users', { params }),
+  updateUser: (id: number, data: { username: string; email: string; role: 'user' | 'admin'; status: 'active' | 'suspended'; unlock_level: number; trust_score: number; reason: string }) => api.patch<ApiResponse<AdminUser>, ApiResponse<AdminUser>>(`/admin/users/${id}`, data),
   setUserStatus: (id: number, status: 'active' | 'suspended') => api.patch<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/admin/users/${id}/status`, { status }),
-  contents: (type: 'topic' | 'post', params?: { page?: number; page_size?: number; status?: string }) => api.get<ApiResponse<PageData<AdminContent>>, ApiResponse<PageData<AdminContent>>>('/admin/contents', { params: { type, ...params } }),
+  contents: (type: 'topic' | 'post', params?: { q?: string; sort?: string; order?: 'asc' | 'desc'; page?: number; page_size?: number; status?: string }) => api.get<ApiResponse<PageData<AdminContent>>, ApiResponse<PageData<AdminContent>>>('/admin/contents', { params: { type, ...params } }),
   setContentVisibility: (type: 'topic' | 'post', id: number, hidden: boolean) => api.patch<ApiResponse<{ hidden: boolean }>, ApiResponse<{ hidden: boolean }>>(`/admin/contents/${type}/${id}/visibility`, { hidden }),
-  llmJobs: (params?: { page?: number; page_size?: number; status?: string }) => api.get<ApiResponse<PageData<AdminLLMJob>>, ApiResponse<PageData<AdminLLMJob>>>('/admin/llm-jobs', { params }),
+  llmJobs: (params?: { q?: string; sort?: string; order?: 'asc' | 'desc'; page?: number; page_size?: number; status?: string }) => api.get<ApiResponse<PageData<AdminLLMJob>>, ApiResponse<PageData<AdminLLMJob>>>('/admin/llm-jobs', { params }),
   retryLLMJob: (id: number) => api.post<ApiResponse<{ status: string }>, ApiResponse<{ status: string }>>(`/admin/llm-jobs/${id}/retry`),
-  trustLogs: (params?: { page?: number; page_size?: number; user_id?: number }) => api.get<ApiResponse<PageData<AdminTrustLog>>, ApiResponse<PageData<AdminTrustLog>>>('/admin/trust-logs', { params }),
-  categories: () => api.get<ApiResponse<Category[]>, ApiResponse<Category[]>>('/admin/categories'),
+  trustLogs: (params?: { q?: string; sort?: string; order?: 'asc' | 'desc'; page?: number; page_size?: number; user_id?: number }) => api.get<ApiResponse<PageData<AdminTrustLog>>, ApiResponse<PageData<AdminTrustLog>>>('/admin/trust-logs', { params }),
+  categories: (params?: { q?: string; sort?: string; order?: 'asc' | 'desc' }) => api.get<ApiResponse<Category[]>, ApiResponse<Category[]>>('/admin/categories', { params }),
   createCategory: (data: Omit<Category, 'id'>) => api.post<ApiResponse<Category>, ApiResponse<Category>>('/admin/categories', data),
   updateCategory: (id: number, data: Omit<Category, 'id'>) => api.patch<ApiResponse<Category>, ApiResponse<Category>>(`/admin/categories/${id}`, data),
 };

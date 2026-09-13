@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	ErrReplyLocked     = errors.New("reply permission is not unlocked")
-	ErrTopicLocked     = errors.New("topic creation permission is not unlocked")
-	ErrReadingRequired = errors.New("complete the required reading before replying")
+	ErrReplyLocked            = errors.New("reply permission is not unlocked")
+	ErrTopicLocked            = errors.New("topic creation permission is not unlocked")
+	ErrReadingRequired        = errors.New("complete the required reading before replying")
+	ErrInvalidReadingResource = errors.New("invalid reading resource")
 )
 
 type GovernanceService struct {
@@ -43,20 +44,37 @@ func (s *GovernanceService) Policy() model.GovernancePolicy {
 	}
 }
 
-func (s *GovernanceService) StartReading(ctx context.Context, userID, topicID int64) (*model.ReadingSession, error) {
+func (s *GovernanceService) StartReading(ctx context.Context, userID int64, req *model.StartReadingReq) (*model.ReadingSession, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
 		return nil, err
 	}
-	return s.dao.StartReading(ctx, hex.EncodeToString(buf), userID, topicID)
+	publicID := hex.EncodeToString(buf)
+	var result *model.ReadingSession
+	var err error
+	if req.TopicID != nil && *req.TopicID > 0 && req.Resource == "" {
+		result, err = s.dao.StartTopicReading(ctx, publicID, userID, *req.TopicID)
+	} else if req.TopicID == nil && req.Resource == "forum-guide" {
+		result, err = s.dao.StartResourceReading(ctx, publicID, userID, "guide", req.Resource)
+	} else {
+		return nil, ErrInvalidReadingResource
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.decorateReadingRequirement(ctx, result)
 }
 
 func (s *GovernanceService) Heartbeat(ctx context.Context, userID int64, publicID string, req *model.ReadingHeartbeatReq) (*model.ReadingSession, error) {
-	return s.dao.Heartbeat(ctx, publicID, userID, req.Progress, req.ReplyFocused)
+	result, err := s.dao.Heartbeat(ctx, publicID, userID, req.Progress, req.ReplyFocused)
+	if err != nil {
+		return nil, err
+	}
+	return s.decorateReadingRequirement(ctx, result)
 }
 
-func (s *GovernanceService) CompleteReading(ctx context.Context, userID int64, publicID string) (*model.ReadingSession, error) {
-	result, _, err := s.dao.CompleteReading(ctx, publicID, userID, s.cfg.GovernanceReplyDwellSeconds)
+func (s *GovernanceService) CompleteReading(ctx context.Context, userID int64, publicID string, req *model.CompleteReadingReq) (*model.ReadingSession, error) {
+	result, _, err := s.dao.CompleteReading(ctx, publicID, userID, s.cfg.GovernanceReplyDwellSeconds, s.cfg.GovernanceLongTopicChars, req)
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +82,19 @@ func (s *GovernanceService) CompleteReading(ctx context.Context, userID int64, p
 	if err := s.dao.UpdateUnlockLevel(ctx, userID, s.cfg.AppEnv == "development", policy.Level1ReadSeconds, policy.Level2ReadSeconds, policy.Level3ReadSeconds); err != nil {
 		return nil, err
 	}
+	return result, nil
+}
+
+func (s *GovernanceService) decorateReadingRequirement(ctx context.Context, result *model.ReadingSession) (*model.ReadingSession, error) {
+	if result.ResourceType != "topic" || result.TopicID == nil {
+		result.RequiresReplyDwell = false
+		return result, nil
+	}
+	required, err := s.dao.TopicRequiresReading(ctx, *result.TopicID, s.cfg.GovernanceLongTopicChars)
+	if err != nil {
+		return nil, err
+	}
+	result.RequiresReplyDwell = required
 	return result, nil
 }
 

@@ -84,7 +84,10 @@ func (d *ReviewDAO) Submit(ctx context.Context, reviewerID, taskID int64, req *m
 				}
 				_, err = tx.ExecContext(ctx, `UPDATE user_profiles SET onboarding_status=$2,updated_at=CURRENT_TIMESTAMP WHERE user_id=$1`, authorID, status)
 				if err == nil {
-					_, err = tx.ExecContext(ctx, `UPDATE user_trust_profiles SET trust_score=trust_score+$2,updated_at=CURRENT_TIMESTAMP WHERE user_id=$1`, authorID, delta)
+					_, err = tx.ExecContext(ctx, `UPDATE user_trust_profiles SET trust_score=trust_score+$2,audit_probability=LEAST(0.80,GREATEST(0.05,0.10-(trust_score+$2)/200.0)),updated_at=CURRENT_TIMESTAMP WHERE user_id=$1`, authorID, delta)
+				}
+				if err == nil {
+					_, err = tx.ExecContext(ctx, `INSERT INTO trust_logs(user_id,event_type,score_delta,reason,reference_type,reference_id) VALUES($1,$2,$3,$4,'review_batch',$5)`, authorID, "onboarding_"+status, delta, "社区自述匿名评审结论："+final, s.BatchID)
 				}
 			}
 		}

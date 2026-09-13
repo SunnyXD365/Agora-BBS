@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { GovernancePolicy, Topic, UserProfile } from '@/types/api';
+import { formatReadingDuration } from '@/lib/format';
 
 const capabilityLabels: Record<string, string> = {
   browse: '浏览', bookmark: '收藏', reply: '回复', feedback: '语境反馈', create_topic: '发起主题', review: '匿名盲审',
@@ -11,7 +12,7 @@ export default function CommunitySidebar({ user, topics, topicTotal, categoryCou
     <aside className="space-y-4 xl:sticky xl:top-6">
       {user ? <section className="paper-card rounded-xl p-4">
         <div className="flex items-center justify-between"><h2 className="font-bold">我的成长</h2><span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-bold text-[var(--accent-ink)]">L{user.unlock_level}</span></div>
-        <p className="mt-3 text-xs text-[var(--text-muted)]">有效阅读 {Math.floor(user.verified_read_seconds / 60)} 分钟</p>
+        <p className="mt-3 text-xs text-[var(--text-muted)]">有效阅读 {formatReadingDuration(user.verified_read_seconds)}</p>
         <div className="mt-3 flex flex-wrap gap-1.5">{user.capabilities.map((item) => <span key={item} className="rounded bg-stone-100 px-2 py-1 text-[11px]">{capabilityLabels[item] || item}</span>)}</div>
         <Link href="/profile" className="mt-4 block text-xs font-semibold text-[var(--accent-ink)] hover:underline">查看成长条件 →</Link>
       </section> : <section className="rounded-xl bg-stone-900 p-4 text-stone-50"><h2 className="font-bold">加入讨论</h2><p className="mt-2 text-xs leading-5 text-stone-300">注册后可以收藏主题，并通过有效阅读逐步解锁讨论权限。</p><Link href="/register" className="mt-4 inline-block rounded bg-stone-50 px-3 py-2 text-xs font-bold text-stone-900">创建账号</Link></section>}

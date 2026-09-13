@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import GuideReadingTracker from '@/components/GuideReadingTracker';
 
 const sections = [
   ['quick-start', '第一次使用'],
@@ -31,10 +32,7 @@ export default function GuidePage() {
       </aside>
 
       <article className="space-y-6">
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
-          <h2 className="font-bold text-amber-950">一分钟了解这里</h2>
-          <p className="mt-2 text-sm leading-7 text-amber-900">Agora 鼓励“先读、再回应、说明理由”。权限会随有效阅读和合规参与逐步开放；发出的内容先经过冷静期，重要长文还会接受匿名盲审。</p>
-        </div>
+        <GuideReadingTracker />
 
         <Section id="quick-start" title="第一次使用">
           <ol className="list-decimal space-y-2 pl-5"><li>注册或登录账号；未登录也可以浏览公开主题。</li><li>进入一个感兴趣的主题，阅读观点、依据和作者声明的不确定性。</li><li>登录后可以收藏；到“成长中心”提交社区自述并查看当前等级。</li><li>完成有效阅读后逐步解锁回复、语境反馈、发帖和匿名评审。</li></ol>
@@ -44,13 +42,13 @@ export default function GuidePage() {
           <div className="grid gap-3 sm:grid-cols-2">
             {[['L0 阅读者', '浏览主题、收藏内容'], ['L1 讨论参与者', '回复、语境反馈'], ['L2 主题发起者', '创建结构化主题'], ['L3 社区评审者', '参与匿名盲审']].map(([level, ability]) => <div key={level} className="rounded-lg border border-[var(--border-paper)] p-3"><strong className="text-[var(--text-main)]">{level}</strong><p>{ability}</p></div>)}
           </div>
-          <p>升级综合考虑注册时间、有效阅读、合规互动和社区信任。普通用户看不到隐藏信任分，只会看到已解锁能力和下一阶段提示；请以成长中心显示为准。</p>
+          <p>升级综合考虑注册时间、有效阅读、合规互动和社区信任；L3 还要求社区自述通过。普通用户看不到隐藏信任分，只会看到已解锁能力和下一阶段提示；请以成长中心显示为准。</p>
           <p>社区自述不会阻止注册或浏览。评审只判断表达是否得体、参与意愿是否真诚，不判断你的观点是否“正确”。</p>
         </Section>
 
         <Section id="reading" title="什么算有效阅读">
-          <p>打开主题后，系统会建立阅读会话并定期记录进度。请正常浏览内容，不要反复刷新或直接拖动进度。</p>
-          <p>长文或高争议分类在回复前需要滚动到底，并在回复区域停留一段时间。满足条件后，页面会提示可以参与回复；累计有效时间也会同步到成长中心。</p>
+          <p>打开主题或论坛使用手册后，系统会建立阅读会话并定期记录进度。请正常浏览内容，不要反复刷新或直接拖动进度。</p>
+          <p>普通主题滚动到底即可完成本次阅读。长文或高争议分类还需要在回复区域停留一段时间；满足条件后，页面会提示阅读已完成，累计有效时间也会同步到成长中心。</p>
         </Section>
 
         <Section id="topics" title="如何发起一个好主题">

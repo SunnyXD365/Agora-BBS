@@ -120,7 +120,10 @@ func (s *UserService) Login(ctx context.Context, req *model.LoginReq) (*model.Lo
 			return nil, fmt.Errorf("%w: %v", ErrAdminEmailUnavailable, err)
 		}
 		resp := &model.LoginResp{RequiresEmailVerification: true, ChallengeID: challengeID, MaskedEmail: maskEmail(user.Email), ExpiresInSeconds: int(adminCodeValidity.Seconds())}
-		if s.appEnv != "production" && (s.mailer == nil || !s.mailer.Configured()) {
+		// Development keeps the code in the response for deterministic local/E2E
+		// verification even when a real SMTP sender is configured. Production
+		// never exposes it.
+		if s.appEnv != "production" {
 			resp.DevelopmentVerificationCode = code
 		}
 		return resp, nil

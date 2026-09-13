@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"errors"
+	"io"
 	"net/http"
 
 	"agora-backend/internal/model"
@@ -25,9 +26,13 @@ func (h *GovernanceHandler) StartReading(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, 40001, "invalid request body")
 		return
 	}
-	data, err := h.service.StartReading(c.Request.Context(), c.GetInt64("userID"), req.TopicID)
+	data, err := h.service.StartReading(c.Request.Context(), c.GetInt64("userID"), &req)
 	if errors.Is(err, sql.ErrNoRows) {
-		response.Error(c, http.StatusNotFound, 40401, "topic not found")
+		response.Error(c, http.StatusNotFound, 40401, "reading resource not found")
+		return
+	}
+	if errors.Is(err, service.ErrInvalidReadingResource) {
+		response.Error(c, http.StatusBadRequest, 40002, err.Error())
 		return
 	}
 	if err != nil {
@@ -56,7 +61,12 @@ func (h *GovernanceHandler) Heartbeat(c *gin.Context) {
 }
 
 func (h *GovernanceHandler) Complete(c *gin.Context) {
-	data, err := h.service.CompleteReading(c.Request.Context(), c.GetInt64("userID"), c.Param("id"))
+	var req model.CompleteReadingReq
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(c, http.StatusBadRequest, 40001, "invalid completion state")
+		return
+	}
+	data, err := h.service.CompleteReading(c.Request.Context(), c.GetInt64("userID"), c.Param("id"), &req)
 	if errors.Is(err, sql.ErrNoRows) {
 		response.Error(c, http.StatusNotFound, 40401, "reading session not found")
 		return

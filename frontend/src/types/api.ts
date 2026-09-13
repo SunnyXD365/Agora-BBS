@@ -138,11 +138,14 @@ export interface GovernancePolicy {
 
 export interface ReadingSession {
   id: string;
-  topic_id: number;
+  topic_id?: number;
+  resource_type: 'topic' | 'guide';
+  resource_key: string;
   progress: number;
   reading_seconds: number;
   reply_dwell_seconds: number;
   bottom_reached: boolean;
+  requires_reply_dwell: boolean;
   eligible: boolean;
   completed: boolean;
   last_heartbeat_at: string;

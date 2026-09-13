@@ -14,7 +14,7 @@ const growthSteps = [
   ['L0 阅读者', '可浏览和收藏，通过有效阅读积累成长进度。'],
   ['L1 参与者', '解锁回复与语境反馈。'],
   ['L2 发起者', '解锁结构化主题发布。'],
-  ['L3 评审者', '解锁匿名盲审，帮助维护讨论质量。'],
+  ['L3 评审者', '完成自述评审并满足阅读、互动与信任条件后解锁匿名盲审。'],
 ];
 
 export default function UsageGuideCard({ context = 'home' }: UsageGuideCardProps) {

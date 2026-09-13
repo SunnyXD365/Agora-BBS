@@ -100,6 +100,7 @@ func SetupRouter(cfg *config.Config, store *cache.Store, database *sql.DB, h *Ha
 		{
 			admin.GET("/overview", h.AdminHandler.Overview)
 			admin.GET("/users", h.AdminHandler.Users)
+			admin.PATCH("/users/:id", h.AdminHandler.UpdateUser)
 			admin.PATCH("/users/:id/status", h.AdminHandler.SetUserStatus)
 			admin.GET("/contents", h.AdminHandler.Contents)
 			admin.PATCH("/contents/:type/:id/visibility", h.AdminHandler.SetContentVisibility)

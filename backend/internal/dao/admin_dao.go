@@ -125,8 +125,30 @@ func (d *AdminDAO) Overview(ctx context.Context, days int) (*model.AdminOverview
 	return result, rows.Err()
 }
 
-func (d *AdminDAO) ListUsers(ctx context.Context, page, pageSize int) ([]*model.AdminUser, int64, error) {
-	rows, err := d.db.QueryContext(ctx, `SELECT u.id,u.username,u.email,u.role,u.status,tp.unlock_level,tp.trust_score,tp.verified_read_seconds,p.onboarding_status,u.created_at FROM users u JOIN user_trust_profiles tp ON tp.user_id=u.id JOIN user_profiles p ON p.user_id=u.id ORDER BY u.created_at DESC LIMIT $1 OFFSET $2`, pageSize, (page-1)*pageSize)
+func (d *AdminDAO) ListUsers(ctx context.Context, query *model.AdminUserQuery) ([]*model.AdminUser, int64, error) {
+	filters, args := []string{"TRUE"}, []any{}
+	if query.Query != "" {
+		args = append(args, query.Query)
+		filters = append(filters, fmt.Sprintf("(u.username ILIKE '%%' || $%d || '%%' OR COALESCE(u.email,'') ILIKE '%%' || $%d || '%%')", len(args), len(args)))
+	}
+	if query.Level >= 0 {
+		args = append(args, query.Level)
+		filters = append(filters, fmt.Sprintf("tp.unlock_level=$%d", len(args)))
+	}
+	if query.Role != "" {
+		args = append(args, query.Role)
+		filters = append(filters, fmt.Sprintf("u.role=$%d", len(args)))
+	}
+	if query.Status != "" {
+		args = append(args, query.Status)
+		filters = append(filters, fmt.Sprintf("u.status=$%d", len(args)))
+	}
+	where := " WHERE " + strings.Join(filters, " AND ")
+	sortColumn := adminSortColumn(query.Sort, map[string]string{"created_at": "u.created_at", "username": "u.username", "level": "tp.unlock_level", "trust_score": "tp.trust_score", "reading_seconds": "tp.verified_read_seconds"}, "u.created_at")
+	dataArgs := append([]any{}, args...)
+	dataArgs = append(dataArgs, query.PageSize, (query.Page-1)*query.PageSize)
+	dataQuery := fmt.Sprintf(`SELECT u.id,u.username,u.email,u.role,u.status,tp.unlock_level,tp.trust_score,tp.verified_read_seconds,p.onboarding_status,u.created_at FROM users u JOIN user_trust_profiles tp ON tp.user_id=u.id JOIN user_profiles p ON p.user_id=u.id%s ORDER BY %s %s,u.id DESC LIMIT $%d OFFSET $%d`, where, sortColumn, adminSortDirection(query.Order), len(dataArgs)-1, len(dataArgs))
+	rows, err := d.db.QueryContext(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -139,11 +161,15 @@ func (d *AdminDAO) ListUsers(ctx context.Context, page, pageSize int) ([]*model.
 		}
 		items = append(items, item)
 	}
-	var total int64
-	if err = d.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&total); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	return items, total, rows.Err()
+	var total int64
+	countQuery := `SELECT COUNT(*) FROM users u JOIN user_trust_profiles tp ON tp.user_id=u.id JOIN user_profiles p ON p.user_id=u.id` + where
+	if err = d.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (d *AdminDAO) SetUserStatus(ctx context.Context, id int64, status string) error {
@@ -158,52 +184,103 @@ func (d *AdminDAO) SetUserStatus(ctx context.Context, id int64, status string) e
 	return nil
 }
 
-func (d *AdminDAO) ListContent(ctx context.Context, kind, status string, page, pageSize int) ([]*model.AdminContent, int64, error) {
-	if kind != "topic" && kind != "post" {
+func (d *AdminDAO) UpdateUser(ctx context.Context, actorID, targetID int64, req *model.UpdateAdminUserReq) (*model.AdminUser, error) {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var oldRole, oldStatus string
+	var oldLevel, oldTrust int
+	if err = tx.QueryRowContext(ctx, `
+		SELECT u.role,u.status,tp.unlock_level,tp.trust_score
+		FROM users u JOIN user_trust_profiles tp ON tp.user_id=u.id
+		WHERE u.id=$1 FOR UPDATE OF u,tp`, targetID).Scan(&oldRole, &oldStatus, &oldLevel, &oldTrust); err != nil {
+		return nil, err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET username=$2,email=$3,role=$4,status=$5,updated_at=CURRENT_TIMESTAMP WHERE id=$1`, targetID, req.Username, req.Email, req.Role, req.Status); err != nil {
+		return nil, err
+	}
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE user_trust_profiles
+		SET unlock_level=$2,trust_score=$3::integer,
+			audit_probability=LEAST(0.80,GREATEST(0.05,0.10-(($3::integer)::double precision)/200.0)),updated_at=CURRENT_TIMESTAMP
+		WHERE user_id=$1`, targetID, req.UnlockLevel, req.TrustScore); err != nil {
+		return nil, err
+	}
+	auditReason := fmt.Sprintf("管理员 #%d：%s；身份 %s→%s，状态 %s→%s，等级 L%d→L%d，信任分 %d→%d", actorID, req.Reason, oldRole, req.Role, oldStatus, req.Status, oldLevel, req.UnlockLevel, oldTrust, req.TrustScore)
+	if _, err = tx.ExecContext(ctx, `INSERT INTO trust_logs(user_id,event_type,score_delta,reason,reference_type,reference_id) VALUES($1,'admin_user_update',$2,$3,'admin_user',$4)`, targetID, req.TrustScore-oldTrust, auditReason, actorID); err != nil {
+		return nil, err
+	}
+	item := &model.AdminUser{}
+	if err = tx.QueryRowContext(ctx, `
+		SELECT u.id,u.username,u.email,u.role,u.status,tp.unlock_level,tp.trust_score,tp.verified_read_seconds,p.onboarding_status,u.created_at
+		FROM users u JOIN user_trust_profiles tp ON tp.user_id=u.id JOIN user_profiles p ON p.user_id=u.id WHERE u.id=$1`, targetID).
+		Scan(&item.ID, &item.Username, &item.Email, &item.Role, &item.Status, &item.UnlockLevel, &item.TrustScore, &item.VerifiedReadSeconds, &item.OnboardingStatus, &item.CreatedAt); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return item, nil
+}
+
+func (d *AdminDAO) ListContent(ctx context.Context, request *model.AdminContentQuery) ([]*model.AdminContent, int64, error) {
+	if request.Kind != "topic" && request.Kind != "post" {
 		return nil, 0, errors.New("invalid content type")
 	}
 	table, titleExpr := "topics", "title"
-	if kind == "post" {
+	if request.Kind == "post" {
 		table, titleExpr = "posts", "'回复 #' || c.id::text"
 	}
-	filter, args := " WHERE TRUE", []any{pageSize, (page - 1) * pageSize}
-	if kind == "topic" {
-		filter += " AND c.status <> 'draft'"
+	filters, args := []string{"TRUE"}, []any{}
+	if request.Kind == "topic" {
+		filters = append(filters, "c.status <> 'draft'")
 	}
-	if status != "" {
-		filter += " AND c.status=$3"
-		args = append(args, status)
+	if request.Status != "" {
+		args = append(args, request.Status)
+		filters = append(filters, fmt.Sprintf("c.status=$%d", len(args)))
 	}
-	query := fmt.Sprintf(`SELECT c.id,%s,left(c.content,160),u.username,c.status,c.created_at FROM %s c JOIN users u ON u.id=c.user_id%s ORDER BY c.created_at DESC LIMIT $1 OFFSET $2`, titleExpr, table, filter)
-	rows, err := d.db.QueryContext(ctx, query, args...)
+	if request.Query != "" {
+		args = append(args, request.Query)
+		searchColumn := "c.content"
+		if request.Kind == "topic" {
+			searchColumn = "c.title || ' ' || c.content || ' ' || COALESCE(c.structured_content::text,'')"
+		}
+		filters = append(filters, fmt.Sprintf("(%s ILIKE '%%' || $%d || '%%' OR u.username ILIKE '%%' || $%d || '%%')", searchColumn, len(args), len(args)))
+	}
+	where := " WHERE " + strings.Join(filters, " AND ")
+	sortTitle := "c.title"
+	if request.Kind == "post" {
+		sortTitle = "c.content"
+	}
+	sortColumn := adminSortColumn(request.Sort, map[string]string{"created_at": "c.created_at", "title": sortTitle, "author": "u.username", "status": "c.status"}, "c.created_at")
+	dataArgs := append([]any{}, args...)
+	dataArgs = append(dataArgs, request.PageSize, (request.Page-1)*request.PageSize)
+	dataQuery := fmt.Sprintf(`SELECT c.id,%s,left(c.content,160),u.username,c.status,c.created_at FROM %s c JOIN users u ON u.id=c.user_id%s ORDER BY %s %s,c.id DESC LIMIT $%d OFFSET $%d`, titleExpr, table, where, sortColumn, adminSortDirection(request.Order), len(dataArgs)-1, len(dataArgs))
+	rows, err := d.db.QueryContext(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 	items := make([]*model.AdminContent, 0)
 	for rows.Next() {
-		item := &model.AdminContent{Type: kind}
+		item := &model.AdminContent{Type: request.Kind}
 		if err = rows.Scan(&item.ID, &item.Title, &item.Excerpt, &item.AuthorName, &item.Status, &item.CreatedAt); err != nil {
 			return nil, 0, err
 		}
 		items = append(items, item)
 	}
-	countFilter := " WHERE TRUE"
-	if kind == "topic" {
-		countFilter += " AND c.status <> 'draft'"
-	}
-	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s c%s`, table, countFilter)
-	countArgs := []any{}
-	if status != "" {
-		countFilter += " AND c.status=$1"
-		countQuery = fmt.Sprintf(`SELECT COUNT(*) FROM %s c%s`, table, countFilter)
-		countArgs = []any{status}
-	}
-	var total int64
-	if err = d.db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	return items, total, rows.Err()
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s c JOIN users u ON u.id=c.user_id%s`, table, where)
+	var total int64
+	if err = d.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (d *AdminDAO) SetContentVisibility(ctx context.Context, kind string, id int64, hidden bool) error {
@@ -226,13 +303,22 @@ func (d *AdminDAO) SetContentVisibility(ctx context.Context, kind string, id int
 	return nil
 }
 
-func (d *AdminDAO) ListLLMJobs(ctx context.Context, status string, page, pageSize int) ([]*model.AdminLLMJob, int64, error) {
-	filter, args := "", []any{pageSize, (page - 1) * pageSize}
-	if status != "" {
-		filter = " WHERE status=$3"
-		args = append(args, status)
+func (d *AdminDAO) ListLLMJobs(ctx context.Context, request *model.AdminLLMJobQuery) ([]*model.AdminLLMJob, int64, error) {
+	filters, args := []string{"TRUE"}, []any{}
+	if request.Status != "" {
+		args = append(args, request.Status)
+		filters = append(filters, fmt.Sprintf("status=$%d", len(args)))
 	}
-	rows, err := d.db.QueryContext(ctx, `SELECT id,job_type,aggregate_type,aggregate_id,status,attempts,model,result,error_message,prompt_tokens,completion_tokens,latency_ms,created_at,completed_at FROM llm_jobs`+filter+` ORDER BY created_at DESC LIMIT $1 OFFSET $2`, args...)
+	if request.Query != "" {
+		args = append(args, request.Query)
+		filters = append(filters, fmt.Sprintf("(job_type ILIKE '%%' || $%d || '%%' OR aggregate_type ILIKE '%%' || $%d || '%%' OR model ILIKE '%%' || $%d || '%%' OR error_message ILIKE '%%' || $%d || '%%' OR aggregate_id::text ILIKE '%%' || $%d || '%%')", len(args), len(args), len(args), len(args), len(args)))
+	}
+	where := " WHERE " + strings.Join(filters, " AND ")
+	sortColumn := adminSortColumn(request.Sort, map[string]string{"created_at": "created_at", "latency_ms": "latency_ms", "tokens": "prompt_tokens+completion_tokens", "attempts": "attempts", "status": "status"}, "created_at")
+	dataArgs := append([]any{}, args...)
+	dataArgs = append(dataArgs, request.PageSize, (request.Page-1)*request.PageSize)
+	dataQuery := fmt.Sprintf(`SELECT id,job_type,aggregate_type,aggregate_id,status,attempts,model,result,error_message,prompt_tokens,completion_tokens,latency_ms,created_at,completed_at FROM llm_jobs%s ORDER BY %s %s,id DESC LIMIT $%d OFFSET $%d`, where, sortColumn, adminSortDirection(request.Order), len(dataArgs)-1, len(dataArgs))
+	rows, err := d.db.QueryContext(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -245,17 +331,15 @@ func (d *AdminDAO) ListLLMJobs(ctx context.Context, status string, page, pageSiz
 		}
 		items = append(items, item)
 	}
-	countQuery := "SELECT COUNT(*) FROM llm_jobs"
-	countArgs := []any{}
-	if status != "" {
-		countQuery += " WHERE status=$1"
-		countArgs = []any{status}
-	}
-	var total int64
-	if err = d.db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	return items, total, rows.Err()
+	countQuery := "SELECT COUNT(*) FROM llm_jobs" + where
+	var total int64
+	if err = d.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (d *AdminDAO) GetLLMJob(ctx context.Context, id int64) (*model.AdminLLMJob, error) {
@@ -264,13 +348,22 @@ func (d *AdminDAO) GetLLMJob(ctx context.Context, id int64) (*model.AdminLLMJob,
 	return item, err
 }
 
-func (d *AdminDAO) ListTrustLogs(ctx context.Context, userID int64, page, pageSize int) ([]*model.AdminTrustLog, int64, error) {
-	filter, args := "", []any{pageSize, (page - 1) * pageSize}
-	if userID > 0 {
-		filter = " WHERE l.user_id=$3"
-		args = append(args, userID)
+func (d *AdminDAO) ListTrustLogs(ctx context.Context, request *model.AdminTrustLogQuery) ([]*model.AdminTrustLog, int64, error) {
+	filters, args := []string{"TRUE"}, []any{}
+	if request.UserID > 0 {
+		args = append(args, request.UserID)
+		filters = append(filters, fmt.Sprintf("l.user_id=$%d", len(args)))
 	}
-	rows, err := d.db.QueryContext(ctx, `SELECT l.id,l.user_id,u.username,l.event_type,l.score_delta,l.reason,COALESCE(l.reference_type,''),l.reference_id,l.created_at FROM trust_logs l JOIN users u ON u.id=l.user_id`+filter+` ORDER BY l.created_at DESC LIMIT $1 OFFSET $2`, args...)
+	if request.Query != "" {
+		args = append(args, request.Query)
+		filters = append(filters, fmt.Sprintf("(u.username ILIKE '%%' || $%d || '%%' OR l.event_type ILIKE '%%' || $%d || '%%' OR l.reason ILIKE '%%' || $%d || '%%' OR COALESCE(l.reference_type,'') ILIKE '%%' || $%d || '%%')", len(args), len(args), len(args), len(args)))
+	}
+	where := " WHERE " + strings.Join(filters, " AND ")
+	sortColumn := adminSortColumn(request.Sort, map[string]string{"created_at": "l.created_at", "score_delta": "l.score_delta", "username": "u.username", "event_type": "l.event_type"}, "l.created_at")
+	dataArgs := append([]any{}, args...)
+	dataArgs = append(dataArgs, request.PageSize, (request.Page-1)*request.PageSize)
+	dataQuery := fmt.Sprintf(`SELECT l.id,l.user_id,u.username,l.event_type,l.score_delta,l.reason,COALESCE(l.reference_type,''),l.reference_id,l.created_at FROM trust_logs l JOIN users u ON u.id=l.user_id%s ORDER BY %s %s,l.id DESC LIMIT $%d OFFSET $%d`, where, sortColumn, adminSortDirection(request.Order), len(dataArgs)-1, len(dataArgs))
+	rows, err := d.db.QueryContext(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -283,20 +376,20 @@ func (d *AdminDAO) ListTrustLogs(ctx context.Context, userID int64, page, pageSi
 		}
 		items = append(items, item)
 	}
-	countQuery, countArgs := "SELECT COUNT(*) FROM trust_logs", []any{}
-	if userID > 0 {
-		countQuery += " WHERE user_id=$1"
-		countArgs = []any{userID}
-	}
-	var total int64
-	if err = d.db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	return items, total, rows.Err()
+	countQuery := "SELECT COUNT(*) FROM trust_logs l JOIN users u ON u.id=l.user_id" + where
+	var total int64
+	if err = d.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
-func (d *AdminDAO) ListAllCategories(ctx context.Context) ([]*model.Category, error) {
-	rows, err := d.db.QueryContext(ctx, `SELECT id,name,slug,description,sort_order,is_active,requires_review,created_at,updated_at FROM categories ORDER BY sort_order,id`)
+func (d *AdminDAO) ListAllCategories(ctx context.Context, request *model.AdminCategoryQuery) ([]*model.Category, error) {
+	sortColumn := adminSortColumn(request.Sort, map[string]string{"sort_order": "sort_order", "name": "name", "created_at": "created_at", "status": "is_active"}, "sort_order")
+	rows, err := d.db.QueryContext(ctx, fmt.Sprintf(`SELECT id,name,slug,description,sort_order,is_active,requires_review,created_at,updated_at FROM categories WHERE ($1='' OR name ILIKE '%%' || $1 || '%%' OR slug ILIKE '%%' || $1 || '%%' OR description ILIKE '%%' || $1 || '%%') ORDER BY %s %s,id ASC`, sortColumn, adminSortDirection(request.Order)), request.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -310,6 +403,20 @@ func (d *AdminDAO) ListAllCategories(ctx context.Context) ([]*model.Category, er
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func adminSortColumn(requested string, allowed map[string]string, fallback string) string {
+	if column, ok := allowed[requested]; ok {
+		return column
+	}
+	return fallback
+}
+
+func adminSortDirection(requested string) string {
+	if strings.EqualFold(requested, "asc") {
+		return "ASC"
+	}
+	return "DESC"
 }
 func (d *AdminDAO) CreateCategory(ctx context.Context, req *model.UpdateCategoryReq) (*model.Category, error) {
 	item := &model.Category{}
