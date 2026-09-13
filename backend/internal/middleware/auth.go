@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"agora-backend/internal/pkg/jwt"
 	"agora-backend/internal/pkg/response"
+	"github.com/gin-gonic/gin"
 )
 
 func JWTAuth(jwtSecret string) gin.HandlerFunc {
@@ -34,6 +34,7 @@ func JWTAuth(jwtSecret string) gin.HandlerFunc {
 
 		// 将解析出的 userID 写入上下文，后端的 Handler 可以随时取出
 		c.Set("userID", claims.UserID)
+		c.Set("adminVerified", claims.AdminVerified)
 		c.Next()
 	}
 }
