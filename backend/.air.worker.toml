@@ -6,3 +6,6 @@ cmd = "go build -o ./tmp/worker_server ./cmd/worker/main.go"
 bin = "./tmp/worker_server"
 include_ext = ["go", "yaml"]
 exclude_dir = ["tmp", "vendor"]
+# Docker Desktop bind mounts on Windows may not forward fsnotify events.
+poll = true
+poll_interval = 500
