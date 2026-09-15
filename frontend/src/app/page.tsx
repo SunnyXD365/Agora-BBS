@@ -68,15 +68,15 @@ export default function HomePage() {
 
       {/* 主栏：板块过滤与帖子列表 */}
       <div id="topic-list" className="order-1 min-w-0 scroll-mt-6 space-y-4 lg:order-2">
-        {/* 板块 Selector 标栏 */}
-        <div className="flex items-center justify-between rounded-lg border bg-white p-3 shadow-sm">
-          <div className="flex flex-wrap gap-2">
+        {/* 板块 Selector 标栏：统一使用 paper-card 与全局按钮样式 */}
+        <div className="paper-card flex items-center justify-between gap-3 rounded-xl p-3">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => { setLoading(true); setPage(1); setSelectedCategory(undefined); }}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 selectedCategory === undefined
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'paper-btn-primary'
+                  : 'bg-stone-100 text-[var(--text-muted)] hover:bg-stone-200 hover:text-stone-900'
               }`}
             >
               全部
@@ -85,10 +85,10 @@ export default function HomePage() {
               <button
                 key={c.id}
                 onClick={() => { setLoading(true); setPage(1); setSelectedCategory(c.id); }}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                   selectedCategory === c.id
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'paper-btn-primary'
+                    : 'bg-stone-100 text-[var(--text-muted)] hover:bg-stone-200 hover:text-stone-900'
                 }`}
               >
                 {c.name}
@@ -98,7 +98,7 @@ export default function HomePage() {
 
           <Link
             href={user ? '/topics/new' : '/login'}
-            className="rounded-md bg-blue-600 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition-colors"
+            className="paper-btn-primary shrink-0 rounded-lg px-3.5 py-1.5 text-xs font-medium"
           >
             + 发新帖
           </Link>
@@ -109,11 +109,11 @@ export default function HomePage() {
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-24 animate-pulse rounded-lg bg-gray-200" />
+              <div key={i} className="h-24 animate-pulse rounded-xl bg-stone-200" />
             ))}
           </div>
         ) : topics.length === 0 ? (
-          <div className="rounded-lg border bg-white p-12 text-center text-sm text-gray-500">
+          <div className="paper-card rounded-xl p-12 text-center text-sm text-[var(--text-muted)]">
             该板块下暂无帖子，快来抢沙发吧！
           </div>
         ) : (
