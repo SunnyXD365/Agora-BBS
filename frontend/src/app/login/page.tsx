@@ -46,7 +46,7 @@ export default function LoginPage() {
       <h1 className="mt-2 text-center text-2xl font-bold">{challenge ? '管理员邮箱验证' : '登录 Agora BBS'}</h1>
       <p className="mt-2 text-center text-xs text-[var(--text-muted)]">{challenge ? `验证码已发送至 ${challenge.email}` : '普通用户进入社区，管理员验证邮箱后进入管理端'}</p>
       {error && <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">{error}</div>}
-      {challenge?.devCode && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">开发环境演示验证码：<strong className="tracking-widest">{challenge.devCode}</strong></div>}
+      {/* {challenge?.devCode && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">开发环境演示验证码：<strong className="tracking-widest">{challenge.devCode}</strong></div>} */}
       {!challenge ? <form onSubmit={submitCredentials} className="mt-6 space-y-4">
         <Field label="用户名"><input required value={username} onChange={(e) => setUsername(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm" placeholder="请输入用户名" /></Field>
         <Field label="密码"><input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm" placeholder="请输入密码" /></Field>
