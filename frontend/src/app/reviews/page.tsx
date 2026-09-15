@@ -23,7 +23,7 @@ export default function ReviewsPage() {
 
   useEffect(() => {
     if (isLoading) return;
-    if (!user?.capabilities.includes('review')) return;
+    if (!user?.capabilities.includes('blind_review')) return;
     let cancelled = false;
     reviewApi.list()
       .then((result) => { if (!cancelled) setTasks(result.data); })
@@ -32,7 +32,7 @@ export default function ReviewsPage() {
   }, [isLoading, user]);
 
   if (isLoading || loading) return <div className="mx-auto h-48 max-w-3xl animate-pulse rounded-xl bg-stone-200" />;
-  if (!user?.capabilities.includes('review')) return <div className="paper-card mx-auto max-w-3xl rounded-xl p-10 text-center">匿名盲审将在达到 L3 后解锁。</div>;
+  if (!user?.capabilities.includes('blind_review')) return <div className="paper-card mx-auto max-w-3xl rounded-xl p-10 text-center">匿名盲审将在达到 L3 后解锁。</div>;
   const pageTasks = tasks.slice((page - 1) * pageSize, page * pageSize);
 
   return (
